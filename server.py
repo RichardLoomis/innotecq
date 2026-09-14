@@ -49,30 +49,33 @@ _lock = threading.Lock()
 _active_chats = 0
 
 
-def _endpoint(mode: str) -> dict | None:
-    """Resolve an LLM endpoint for a mode.
+def _env_prefix(mode: str) -> str:
+    return "DIRECT" if mode == "direct" else "XENOVIA"
 
-    'proxy'  -> the Xenovia tenant proxy (XENOVIA_*): calls are governed.
-    'direct' -> straight to the model provider (DIRECT_*): no proxy, no policy.
-    Same LangChain agent, same model; the only difference is the base URL.
+
+def _endpoint(mode: str, agent_key: str) -> dict | None:
+    """Resolve one agent's LLM endpoint for a mode.
+
+    Each agent has its own gateway, so config is per-agent:
+      <PREFIX>_<AGENT>_BASE_URL / _API_KEY / _MODEL
+    falling back to a global <PREFIX>_BASE_URL / ... when an agent has none.
+    PREFIX is XENOVIA for the proxy mode (governed) and DIRECT for direct
+    (no proxy). AGENT is the upper-cased key, e.g. XENOVIA_HELPDESK_BASE_URL.
     """
     env = load_env()
-    if mode == "direct":
-        base_url = env.get("DIRECT_BASE_URL")
-        if not base_url:
-            return None
-        return {
-            "base_url": base_url,
-            "api_key": env.get("DIRECT_API_KEY", ""),
-            "model": env.get("DIRECT_MODEL") or env.get("XENOVIA_MODEL", DEFAULT_MODEL),
-        }
-    base_url = env.get("XENOVIA_BASE_URL")
+    prefix = _env_prefix(mode)
+    agent = agent_key.upper()
+
+    def get(suffix: str) -> str:
+        return env.get(f"{prefix}_{agent}_{suffix}") or env.get(f"{prefix}_{suffix}", "")
+
+    base_url = get("BASE_URL")
     if not base_url:
         return None
     return {
         "base_url": base_url,
-        "api_key": env.get("XENOVIA_API_KEY", ""),
-        "model": env.get("XENOVIA_MODEL", DEFAULT_MODEL),
+        "api_key": get("API_KEY"),
+        "model": get("MODEL") or DEFAULT_MODEL,
     }
 
 
@@ -158,26 +161,21 @@ def roster(request: Request) -> dict:
     authorized = _authorized(request)
     if gated and not authorized:
         # withhold everything until the visitor authenticates
-        return {"gated": True, "authorized": False,
-                "modes": {"proxy": False, "direct": False},
-                "endpoints": {}, "agents": []}
+        return {"gated": True, "authorized": False, "agents": []}
     return {
         "gated": gated,
         "authorized": authorized,
-        "modes": {
-            "proxy": _endpoint("proxy") is not None,
-            "direct": _endpoint("direct") is not None,
-        },
-        "endpoints": {
-            "proxy": (_endpoint("proxy") or {}).get("base_url"),
-            "direct": (_endpoint("direct") or {}).get("base_url"),
-        },
         "agents": [
             {
                 "key": agent.key,
                 "title": agent.title,
                 "tagline": agent.tagline,
                 "starters": agent.starters,
+                # each agent has its own gateway, so mode availability is per-agent
+                "modes": {
+                    "proxy": _endpoint("proxy", agent.key) is not None,
+                    "direct": _endpoint("direct", agent.key) is not None,
+                },
             }
             for agent in AGENTS.values()
         ],
@@ -235,10 +233,10 @@ async def chat(request: Request) -> StreamingResponse | JSONResponse:
     if mode not in ("proxy", "direct"):
         return JSONResponse({"error": f"unknown mode '{mode}'"}, status_code=400)
 
-    endpoint = _endpoint(mode)
+    endpoint = _endpoint(mode, agent_key)
     if endpoint is None:
-        variable = "DIRECT_BASE_URL" if mode == "direct" else "XENOVIA_BASE_URL"
-        return JSONResponse({"error": f"{mode} endpoint is not configured, set {variable}"},
+        variable = f"{_env_prefix(mode)}_{agent_key.upper()}_BASE_URL"
+        return JSONResponse({"error": f"{mode} gateway for '{agent_key}' is not configured, set {variable}"},
                             status_code=409)
 
     got = _get_session(body.get("session"), agent_key)

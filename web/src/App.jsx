@@ -71,13 +71,19 @@ export default function App() {
     if (r.gated && !r.authorized) return;  // show the gate; no error until an attempt fails
     dispatch({ type: "init", threads: Object.fromEntries(r.agents.map((a) => [a.key, newThread()])) });
     setCurrentKey((k) => k || r.agents[0]?.key);
-    if (!r.modes.proxy && r.modes.direct) setMode("direct");
   }
 
   useEffect(() => {
+    document.body.dataset.regime = mode;
+  }, [mode]);
+
+  // Each agent has its own gateway, so modes are per-agent. When the selected
+  // mode isn't available for the current agent, fall back to the other.
+  useEffect(() => {
     if (!roster) return;
-    document.body.dataset.regime = roster.modes[mode] ? mode : "proxy";
-  }, [mode, roster]);
+    const m = roster.agents.find((a) => a.key === currentKey)?.modes || {};
+    if (!m[mode] && (m.proxy || m.direct)) setMode(m.proxy ? "proxy" : "direct");
+  }, [currentKey, roster]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function send(key, text) {
     const t = threadsRef.current[key];
@@ -136,7 +142,7 @@ export default function App() {
         agent={agent}
         thread={thread}
         mode={mode}
-        modes={roster.modes}
+        modes={agent.modes}
         onMode={setMode}
         onSend={(text) => send(currentKey, text)}
       />

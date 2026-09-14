@@ -59,13 +59,17 @@ npm --prefix web install && npm --prefix web run build
 uvicorn server:app --port 8000            # serves web/dist at /
 ```
 
-Environment (backend). Both are real, OpenAI-compatible endpoints; there is no
-mock. Point both at the same model for a clean before/after.
+Environment (backend). Each agent has its own gateway, so endpoints are
+per-agent (`<AGENT>` is `AP`, `HELPDESK`, `SUPPORT`, or `REPORTING`). All are
+real, OpenAI-compatible endpoints; there is no mock.
 
-- `XENOVIA_BASE_URL` / `XENOVIA_API_KEY` / `XENOVIA_MODEL` — the Xenovia proxy
-  (the "Xenovia" mode).
-- `DIRECT_BASE_URL` / `DIRECT_API_KEY` / `DIRECT_MODEL` — the model provider
-  called directly (the "Direct" mode). A mode's toggle is disabled until set.
+- `XENOVIA_<AGENT>_BASE_URL` / `_API_KEY` / `_MODEL` — that agent's Xenovia
+  gateway (the "Xenovia" proxy mode). Four URLs and keys, one per agent.
+- `DIRECT_<AGENT>_BASE_URL` / `_API_KEY` / `_MODEL` — that agent's model
+  provider called directly (the "Direct" mode), optional.
+- `XENOVIA_BASE_URL` / `DIRECT_BASE_URL` (+ `_API_KEY` / `_MODEL`) — optional
+  global fallbacks used for any agent without its own gateway set. A mode's
+  toggle is disabled per agent until that agent's `*_BASE_URL` is set.
 - `DEMO_PASSWORD` — password gate. When set, the console shows a login screen and
   the API withholds everything (roster, modes, chat) until the visitor enters it;
   the key is checked with a constant-time compare and login attempts are
