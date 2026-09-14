@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import pathlib
 import threading
 import time
@@ -26,13 +27,29 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from agents import AGENTS
-from agents.base import load_env
 
 ROOT = pathlib.Path(__file__).resolve().parent
 WEB_DIST = ROOT / "web" / "dist"
+
+
+def load_env() -> dict[str, str]:
+    """Read .env (comments on their own lines); real environment variables win."""
+    env: dict[str, str] = {}
+    path = ROOT / ".env"
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            env[key.strip()] = value.strip()
+    for key, value in os.environ.items():
+        if key.startswith(("XENOVIA_", "DIRECT_", "DEMO_")) and value:
+            env[key] = value
+    return env
 DEFAULT_MODEL = "claude-sonnet-5"
 MAX_CONCURRENT_CHATS = 8
 MAX_SESSIONS = 40
@@ -130,8 +147,8 @@ def _get_session(session_id: str | None, agent_key: str) -> tuple[str, dict] | N
         new_id = uuid.uuid4().hex[:16]
         _sessions[new_id] = {
             "agent": agent_key,
-            "world": agent.new_world(),
-            "messages": [SystemMessage(content=agent.system_prompt)],
+            "state": agent.new_state(),
+            "messages": [],  # create_agent supplies the system prompt itself
             "busy": False,
             "last_used": time.time(),
         }
@@ -184,14 +201,14 @@ def roster(request: Request) -> dict:
 
 def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
     global _active_chats
-    world = session["world"]
+    state = session["state"]
     agent = AGENTS[session["agent"]]
     try:
         yield json.dumps({"type": "session", "id": session_id}) + "\n"
         session["messages"].append(HumanMessage(content=text))
-        seen = len(world.incidents)
+        seen = len(state.incidents)
         for event in agent.stream(
-            world,
+            state,
             session["messages"],
             base_url=endpoint["base_url"],
             api_key=endpoint["api_key"],
@@ -199,7 +216,7 @@ def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
             max_iters=MAX_ITERS_PER_MESSAGE,
         ):
             yield json.dumps(event) + "\n"
-        new_incidents = world.incidents[seen:]
+        new_incidents = state.incidents[seen:]
         if new_incidents:
             yield json.dumps({"type": "incidents", "items": new_incidents}) + "\n"
         yield json.dumps({"type": "done"}) + "\n"

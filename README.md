@@ -1,12 +1,11 @@
 # Xenovia demo agents — Innotecq partner pack
 
 Four enterprise agents at a fictional EU mid-cap (**Veldhoff Logistics GmbH**,
-Hamburg; all names, customers, and IBANs are invented). Each is its **own
-self-contained agent** — its own class in its own file (`agents/*_agent.py`),
-with its own prompt, tools, mocked backend, gateway, and LangChain loop
-(`ChatOpenAI` + `bind_tools`). There is no shared runner; `agents/base.py` holds
-only shared primitives (the mocked-backend base, the tool type, helpers).
-Strategy and personas per agent: [USE-CASES.md](USE-CASES.md).
+Hamburg; all names, customers, and IBANs are invented). Each is a **standalone
+agent in its own folder** (`agents/ap`, `agents/helpdesk`, `agents/support`,
+`agents/reporting`), built from scratch with LangChain **`create_agent`**, with
+its own prompt, tools, mocked backend, and gateway. The agents share no code
+with each other. Strategy and personas per agent: [USE-CASES.md](USE-CASES.md).
 
 **The point of the architecture:** there is no governance logic anywhere in
 this code. Each agent's `ChatOpenAI` points at its own gateway base URL, so
@@ -103,12 +102,6 @@ Variables, or `railway variables --set "XENOVIA_BASE_URL=..."`). Redeploys
 pick them up automatically; the base URL swap that closes the demo is an env
 var change in Railway.
 
-Before any live demo:
-
-```bash
-python3 run_demo.py selftest   # offline — checks all four mock backends
-```
-
 ## The pack
 
 | Agent | Red-team scenario | Lands with |
@@ -156,19 +149,17 @@ gateway policy pack prevents.
 ```
 server.py          FastAPI: /api chat streaming, sessions, login gate; serves web/dist
 agents/
-  base.py          shared primitives only (World, Tool, helpers) — not a runner
-  ap_agent.py      APAgent: own prompt, backend, tools, and LangChain stream()
-  helpdesk_agent.py / support_agent.py / reporting_agent.py — same, per agent
-  __init__.py      instantiates the four agents into AGENTS
+  __init__.py      collects the four standalone agents into AGENTS
+  ap/agent.py      APAgent: own prompt, mocked backend, tools, create_agent, stream()
+  helpdesk/agent.py / support/agent.py / reporting/agent.py — same, fully standalone
 web/               React UI (Vite) — components in web/src/components/
   src/App.jsx      state, streaming reducer, agent switching
   src/components/  Sidebar, ChatPane, Topbar, ModeToggle, Hero, Thread, …
-run_demo.py        CLI: list, selftest
+run_demo.py        CLI: list the agents
 Dockerfile         two-stage build (Node builds web/, Python serves) for Railway
 railway.json       points Railway at the Dockerfile + /health healthcheck
 USE-CASES.md       the strategy doc: narrative, personas, why these four
 ```
 
-Each agent's mocked backend ships two seed states (a clean one and a
-bait-laden one) used by the offline selftests. The chat console always seeds
-each agent's bait-laden backend, so the red-team item is present to talk to.
+Each agent seeds its own mocked backend with the red-team item present
+(INV-2204 / T-102 / T-502 / DR-2288), so there's always something to talk to.
