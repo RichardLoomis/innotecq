@@ -28,7 +28,7 @@ export default function Sidebar({ agents, currentKey, threads, mode, onSelect })
         );
       })}
       <div className="sidebar-foot">
-        Regime: <b>{mode === "governed" ? "Governed by Xenovia" : "Ungoverned"}</b>
+        <b>{mode === "governed" ? "Governed by Xenovia" : "Ungoverned"}</b>
       </div>
     </nav>
   );

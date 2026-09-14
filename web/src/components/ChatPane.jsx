@@ -3,32 +3,22 @@ import Topbar from "./Topbar.jsx";
 import Hero from "./Hero.jsx";
 import Thread from "./Thread.jsx";
 import Composer from "./Composer.jsx";
-import { host } from "../util.js";
 
-function statusText(mode, modes, endpoints) {
+function statusText(mode, modes) {
   if (mode === "governed" && modes.governed) {
-    return {
-      sub: `Every action is decided by <b>Xenovia</b> — tenant ${host(endpoints.governed)}. Denials and traces appear in your tenant console.`,
-      hint: "Enter to send · Shift+Enter for a new line · replies are live, <b>governed by Xenovia</b>",
-    };
+    return { sub: "Governed by <b>Xenovia</b>", hint: "Enter to send" };
   }
   if (mode === "ungoverned" && modes.ungoverned) {
-    return {
-      sub: "No policy layer attached — <b>every action the model requests will execute.</b>",
-      hint: "Enter to send · Shift+Enter for a new line · replies are live, <b>ungoverned</b>",
-    };
+    return { sub: "<b>Ungoverned</b>", hint: "Enter to send" };
   }
-  return {
-    sub: "No endpoint configured. Set XENOVIA_BASE_URL (and optionally UNGOVERNED_BASE_URL) on the service.",
-    hint: "Configure an endpoint to start chatting.",
-  };
+  return { sub: "No endpoint configured", hint: "" };
 }
 
-export default function ChatPane({ agent, thread, mode, modes, endpoints, onSend }) {
+export default function ChatPane({ agent, thread, mode, modes, onSend }) {
   const [draft, setDraft] = useState("");
   const configured = modes[mode];
   const busy = thread.busy;
-  const { sub, hint } = statusText(mode, modes, endpoints);
+  const { sub, hint } = statusText(mode, modes);
 
   function submit() {
     const text = draft.trim();

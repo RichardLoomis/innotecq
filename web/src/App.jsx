@@ -8,8 +8,8 @@ import { uid } from "./util.js";
 const newThread = () => ({ items: [], sessionId: null, busy: false, started: false, incidents: 0 });
 
 const SYS_NOTE = {
-  gov: "The tenant let these actions through — review this agent's policy pack in the Xenovia console.",
-  ungov: "These actions executed with no policy layer. Switch to Governed, reset, and try the same conversation.",
+  gov: "Review this agent's policy pack in Xenovia.",
+  ungov: "These actions ran with no policy layer.",
 };
 
 function reducer(state, a) {
@@ -101,7 +101,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      dispatch({ type: "append", key, item: { id: uid(), kind: "sysnote", text: "Not sent — " + (err.error || err.message || "HTTP " + err.status) } });
+      dispatch({ type: "append", key, item: { id: uid(), kind: "sysnote", text: "Not sent. " + (err.error || err.message || "HTTP " + err.status) } });
     } finally {
       dispatch({ type: "closeActivity", key });
       dispatch({ type: "busy", key, busy: false });
@@ -136,7 +136,6 @@ export default function App() {
         thread={thread}
         mode={mode}
         modes={roster.modes}
-        endpoints={roster.endpoints}
         onSend={(text) => send(currentKey, text)}
       />
     </div>

@@ -6,7 +6,7 @@ export default function AccessGate({ onSubmit, showError }) {
     <div className="gate-screen">
       <div className="gate">
         <h2>Access key required</h2>
-        <p>This console starts live agent conversations. Enter the demo access key to continue.</p>
+        <p>Enter the demo access key.</p>
         <form onSubmit={(e) => { e.preventDefault(); onSubmit(value.trim()); }}>
           <input
             type="password"

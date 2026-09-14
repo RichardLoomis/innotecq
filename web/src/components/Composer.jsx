@@ -36,7 +36,7 @@ export default function Composer({ value, onChange, onSend, disabled, placeholde
           </svg>
         </button>
       </div>
-      <div className="composer-hint" dangerouslySetInnerHTML={{ __html: hint }} />
+      {hint && <div className="composer-hint" dangerouslySetInnerHTML={{ __html: hint }} />}
     </div>
   );
 }
