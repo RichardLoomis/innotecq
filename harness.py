@@ -104,6 +104,12 @@ class Agent:
     build: Callable[[str], World]
     scenarios: dict[str, Scenario]
     selftests: list[Selftest] = field(default_factory=list)
+    starters: list[str] = field(default_factory=list)
+
+    def chat_world(self) -> World:
+        """World for a live chat session: the fullest scenario, bait included."""
+        key = next((k for k in self.scenarios if k != "normal"), "normal")
+        return self.build(key)
 
 
 def _short(text: str, limit: int) -> str:
@@ -135,6 +141,54 @@ def _execute(tools: dict[str, Tool], name: str, args: dict) -> str:
         return f"error: {exc}"
 
 
+def continue_events(
+    world: World,
+    messages: list,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    max_iters: int = 10,
+) -> Iterator[dict]:
+    """Drive the agent loop until it answers (or errors), yielding events.
+
+    `messages` is mutated in place, so a caller holding a chat session can
+    append the next user message and call this again to continue the same
+    conversation against the same world.
+    """
+    from openai import OpenAI  # imported lazily so `selftest` needs no packages
+
+    tools = {t.name: t for t in world.tools()}
+    client = OpenAI(base_url=base_url, api_key=api_key or "xenovia-demo")
+
+    for _ in range(max_iters):
+        try:
+            reply = (
+                client.chat.completions.create(model=model, messages=messages, tools=_schemas(tools))
+                .choices[0]
+                .message
+            )
+        except Exception as exc:
+            yield {"type": "error", "message": f"model call failed: {exc}"}
+            return
+        messages.append(reply)
+        if not reply.tool_calls:
+            yield {"type": "final", "text": reply.content or "(no reply)"}
+            return
+        if reply.content:
+            yield {"type": "assistant", "text": _short(reply.content, 400)}
+        for call in reply.tool_calls:
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            yield {"type": "tool_call", "name": call.function.name, "args": args}
+            result = _execute(tools, call.function.name, args)
+            yield {"type": "tool_result", "name": call.function.name, "result": _short(result, 600)}
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+    yield {"type": "turn_limit", "message": "stopped at the loop limit before the agent finished"}
+
+
 def run_agent_events(
     agent: Agent,
     scenario_key: str,
@@ -144,12 +198,9 @@ def run_agent_events(
     model: str,
     max_turns: int = 14,
 ) -> Iterator[dict]:
-    """Run one agent scenario, yielding structured events as it progresses."""
-    from openai import OpenAI  # imported lazily so `selftest` needs no packages
-
+    """Run one agent scenario end to end, yielding structured events."""
     scenario = agent.scenarios[scenario_key]
     world = agent.build(scenario_key)
-    tools = {t.name: t for t in world.tools()}
 
     yield {
         "type": "start",
@@ -166,37 +217,12 @@ def run_agent_events(
         {"role": "system", "content": agent.system_prompt},
         {"role": "user", "content": scenario.task},
     ]
-    client = OpenAI(base_url=base_url, api_key=api_key or "xenovia-demo")
-
     finished = False
-    for _ in range(max_turns):
-        try:
-            reply = (
-                client.chat.completions.create(model=model, messages=messages, tools=_schemas(tools))
-                .choices[0]
-                .message
-            )
-        except Exception as exc:
-            yield {"type": "error", "message": f"model call failed: {exc}"}
-            break
-        messages.append(reply)
-        if not reply.tool_calls:
-            yield {"type": "final", "text": reply.content or "(no final message)"}
-            finished = True
-            break
-        if reply.content:
-            yield {"type": "assistant", "text": _short(reply.content, 400)}
-        for call in reply.tool_calls:
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            yield {"type": "tool_call", "name": call.function.name, "args": args}
-            result = _execute(tools, call.function.name, args)
-            yield {"type": "tool_result", "name": call.function.name, "result": _short(result, 600)}
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    else:
-        yield {"type": "turn_limit", "message": "stopped at the turn limit before the agent finished"}
+    for event in continue_events(
+        world, messages, base_url=base_url, api_key=api_key, model=model, max_iters=max_turns
+    ):
+        finished = finished or event["type"] == "final"
+        yield event
 
     yield {"type": "summary", "lines": world.summary()}
     yield {"type": "incidents", "items": list(world.incidents)}

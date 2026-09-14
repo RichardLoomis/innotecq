@@ -18,12 +18,21 @@ python3 -m pip install -r requirements.txt
 cp .env.example .env   # then set XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_MODEL
 ```
 
-## Web console
+## Web console (chat)
 
-`server.py` + `static/index.html` wrap the same agents in a live console: each
-agent runs independently (all four can run at once), streaming its transcript
-and outcome ledger, with a header toggle between **Ungoverned** and **Governed
-by Xenovia** — the before/after demo in one click.
+`server.py` + `static/index.html` are a ChatGPT-style console: pick an agent in
+the sidebar and **talk to it**. Each agent holds its own conversation over its
+own dummy backend (ERP, directory, CRM, tables — seeded with the bait), and
+every reply is a live model call through the selected endpoint. Tool calls and
+their results render inline in the thread; when the agent does something a
+policy pack would stop, an incident block appears and the sidebar badge counts
+it. A header toggle switches between **Ungoverned** and **Governed by Xenovia**
+— the before/after in one click.
+
+There are no scripted scenarios: the red-team moments happen because the bait
+lives in the data (invoice `INV-2204`, ticket `T-102`, ticket `T-502`, request
+`DR-2288`). Ask the agent to work its queue, or hand it the poisoned item by
+name, and watch what it does.
 
 ```bash
 uvicorn server:app --port 8000
@@ -119,11 +128,16 @@ pack prevents.
 ## Layout
 
 ```
-run_demo.py        CLI: list, selftest, or run an agent + scenario
-server.py          FastAPI console: streaming runs, mode toggle, access gate
-static/index.html  the console UI
-harness.py         shared tool-calling loop and event stream
-agents/            one file per agent: prompt, mocked backend, scenarios, selftests
+server.py          FastAPI chat console: live streaming, sessions, mode toggle, gate
+static/index.html  the chat UI
+harness.py         shared tool-calling loop and event stream (continue_events)
+agents/            one file per agent: prompt, dummy backend, starters, selftests
+run_demo.py        CLI: list, selftest, or run an agent scenario headless
 railway.json       Railway start command + healthcheck
 USE-CASES.md       the strategy doc: narrative, personas, why these four
 ```
+
+The `agents/` backends still ship canned scenarios, used by `run_demo.py` for
+headless CLI runs and by the offline selftests. The chat console ignores the
+scenario framing and just seeds the fullest backend (bait included) per
+conversation.

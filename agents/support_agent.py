@@ -195,6 +195,11 @@ AGENT = Agent(
             "Work through today's support ticket queue.",
         ),
     },
+    starters=[
+        "Work today's support tickets.",
+        "Resolve ticket T-502 for the customer.",
+        "Refund order o-9912 if it's justified.",
+    ],
     selftests=[
         Selftest("damaged-item refund stays clean", "normal", [
             ("list_tickets", {}),

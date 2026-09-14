@@ -1,13 +1,15 @@
-"""Web console for the Xenovia demo agents.
+"""Web console for the Xenovia demo agents — a live chat surface.
 
-Each of the four agents runs independently: POST /api/run starts one isolated
-run (fresh world, own tool set) and streams NDJSON events until the outcome.
-Runs are concurrent — the console can drive all four at once.
+Each of the four agents holds its own conversation: a session pins a fresh
+dummy backend (ERP, directory, CRM, tables — bait included) plus the message
+history, and every model call goes live through the endpoint behind the base
+URL. POST /api/chat streams NDJSON events for one user message; sessions
+persist in memory until reset.
 
-Endpoints are configured by environment (or .env locally):
+Environment (or .env locally):
   XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_MODEL       the governed tenant
   UNGOVERNED_BASE_URL / UNGOVERNED_API_KEY / UNGOVERNED_MODEL
-                                    optional raw endpoint for the "before" run
+                                    optional raw endpoint for the before-run
   DEMO_PASSWORD          optional access key; set it on any public deployment
 """
 
@@ -16,21 +18,27 @@ from __future__ import annotations
 import json
 import pathlib
 import threading
+import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from agents import AGENTS
-from harness import load_env, run_agent_events
+from harness import continue_events, load_env
 
 ROOT = pathlib.Path(__file__).resolve().parent
 DEFAULT_MODEL = "claude-sonnet-5"
-MAX_CONCURRENT_RUNS = 6
+MAX_CONCURRENT_CHATS = 8
+MAX_SESSIONS = 40
+MAX_MESSAGE_CHARS = 2000
+MAX_ITERS_PER_MESSAGE = 10
 
 app = FastAPI(title="Xenovia demo console")
 
-_active_runs = 0
-_runs_lock = threading.Lock()
+_sessions: dict[str, dict] = {}
+_lock = threading.Lock()
+_active_chats = 0
 
 
 def _endpoint(mode: str) -> dict | None:
@@ -59,6 +67,30 @@ def _authorized(request: Request) -> bool:
     return not password or request.headers.get("x-demo-key", "") == password
 
 
+def _get_session(session_id: str | None, agent_key: str) -> tuple[str, dict] | None:
+    """Fetch or create a session; returns None when it belongs to another agent."""
+    with _lock:
+        if session_id and session_id in _sessions:
+            session = _sessions[session_id]
+            if session["agent"] != agent_key:
+                return None
+            session["last_used"] = time.time()
+            return session_id, session
+        if len(_sessions) >= MAX_SESSIONS:
+            oldest = min(_sessions, key=lambda k: _sessions[k]["last_used"])
+            del _sessions[oldest]
+        agent = AGENTS[agent_key]
+        new_id = uuid.uuid4().hex[:16]
+        _sessions[new_id] = {
+            "agent": agent_key,
+            "world": agent.chat_world(),
+            "messages": [{"role": "system", "content": agent.system_prompt}],
+            "busy": False,
+            "last_used": time.time(),
+        }
+        return new_id, _sessions[new_id]
+
+
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
@@ -83,51 +115,61 @@ def roster(request: Request) -> dict:
                 "key": agent.key,
                 "title": agent.title,
                 "tagline": agent.tagline,
-                "scenarios": [
-                    {"key": s.key, "blurb": s.blurb, "red_team": s.key != "normal"}
-                    for s in agent.scenarios.values()
-                ],
+                "starters": agent.starters,
             }
             for agent in AGENTS.values()
         ],
     }
 
 
-def _event_stream(agent_key: str, scenario_key: str, endpoint: dict):
-    global _active_runs
+def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
+    global _active_chats
+    world = session["world"]
     try:
-        for event in run_agent_events(
-            AGENTS[agent_key],
-            scenario_key,
+        yield json.dumps({"type": "session", "id": session_id}) + "\n"
+        session["messages"].append({"role": "user", "content": text})
+        seen = len(world.incidents)
+        for event in continue_events(
+            world,
+            session["messages"],
             base_url=endpoint["base_url"],
             api_key=endpoint["api_key"],
             model=endpoint["model"],
+            max_iters=MAX_ITERS_PER_MESSAGE,
         ):
             yield json.dumps(event) + "\n"
-    except Exception as exc:  # keep the console alive whatever a run does
+        new_incidents = world.incidents[seen:]
+        if new_incidents:
+            yield json.dumps({"type": "incidents", "items": new_incidents}) + "\n"
+        yield json.dumps({"type": "done"}) + "\n"
+    except Exception as exc:  # keep the console alive whatever a turn does
         yield json.dumps({"type": "error", "message": str(exc)}) + "\n"
-        yield json.dumps({"type": "done", "finished": False}) + "\n"
+        yield json.dumps({"type": "done"}) + "\n"
     finally:
-        with _runs_lock:
-            _active_runs -= 1
+        session["busy"] = False
+        session["last_used"] = time.time()
+        with _lock:
+            _active_chats -= 1
 
 
-@app.post("/api/run", response_model=None)
-async def run(request: Request) -> StreamingResponse | JSONResponse:
-    global _active_runs
+@app.post("/api/chat", response_model=None)
+async def chat(request: Request) -> StreamingResponse | JSONResponse:
+    global _active_chats
     if not _authorized(request):
         return JSONResponse({"error": "access key required"}, status_code=401)
 
     body = await request.json()
     agent_key = body.get("agent", "")
-    scenario_key = body.get("scenario", "normal")
+    text = str(body.get("message", "")).strip()
     mode = body.get("mode", "governed")
 
-    agent = AGENTS.get(agent_key)
-    if agent is None:
+    if agent_key not in AGENTS:
         return JSONResponse({"error": f"unknown agent '{agent_key}'"}, status_code=404)
-    if scenario_key not in agent.scenarios:
-        return JSONResponse({"error": f"unknown scenario '{scenario_key}'"}, status_code=404)
+    if not text:
+        return JSONResponse({"error": "message is empty"}, status_code=400)
+    if len(text) > MAX_MESSAGE_CHARS:
+        return JSONResponse({"error": f"message is over {MAX_MESSAGE_CHARS} characters"},
+                            status_code=400)
     if mode not in ("governed", "ungoverned"):
         return JSONResponse({"error": f"unknown mode '{mode}'"}, status_code=400)
 
@@ -137,17 +179,35 @@ async def run(request: Request) -> StreamingResponse | JSONResponse:
         return JSONResponse({"error": f"{mode} endpoint is not configured — set {variable}"},
                             status_code=409)
 
-    with _runs_lock:
-        if _active_runs >= MAX_CONCURRENT_RUNS:
-            return JSONResponse({"error": "too many runs in flight — wait for one to finish"},
+    got = _get_session(body.get("session"), agent_key)
+    if got is None:
+        return JSONResponse({"error": "session belongs to a different agent"}, status_code=409)
+    session_id, session = got
+
+    with _lock:
+        if session["busy"]:
+            return JSONResponse({"error": "this conversation is still replying"}, status_code=429)
+        if _active_chats >= MAX_CONCURRENT_CHATS:
+            return JSONResponse({"error": "too many conversations in flight — try again shortly"},
                                 status_code=429)
-        _active_runs += 1
+        session["busy"] = True
+        _active_chats += 1
 
     return StreamingResponse(
-        _event_stream(agent_key, scenario_key, endpoint),
+        _chat_stream(session_id, session, text, endpoint),
         media_type="application/x-ndjson",
         headers={"cache-control": "no-store", "x-accel-buffering": "no"},
     )
+
+
+@app.post("/api/reset")
+async def reset(request: Request) -> JSONResponse:
+    if not _authorized(request):
+        return JSONResponse({"error": "access key required"}, status_code=401)
+    body = await request.json()
+    with _lock:
+        _sessions.pop(body.get("session", ""), None)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/")

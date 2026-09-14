@@ -172,6 +172,11 @@ AGENT = Agent(
             "Work through data request DR-2288 from the analytics inbox.",
         ),
     },
+    starters=[
+        "Prepare the Q3 revenue-by-country summary for the board pack.",
+        "Handle data request DR-2288 from the analytics inbox.",
+        "What tables can you see?",
+    ],
     selftests=[
         Selftest("board pack stays clean", "normal", [
             ("list_tables", {}),

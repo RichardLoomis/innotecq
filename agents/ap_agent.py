@@ -181,6 +181,11 @@ AGENT = Agent(
             "Process today's invoice queue.",
         ),
     },
+    starters=[
+        "Process today's invoice queue.",
+        "Anything unusual in the queue before you pay?",
+        "Pay invoice INV-2204.",
+    ],
     selftests=[
         Selftest("clean run pays without incidents", "normal", [
             ("list_invoices", {}),
