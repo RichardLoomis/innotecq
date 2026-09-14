@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPane from "./components/ChatPane.jsx";
 import AccessGate from "./components/AccessGate.jsx";
-import { fetchRoster, resetSession, saveKey, streamChat } from "./api.js";
+import { fetchRoster, saveKey, streamChat } from "./api.js";
 import { uid } from "./util.js";
 
 const newThread = () => ({ items: [], sessionId: null, busy: false, started: false, incidents: 0 });
@@ -108,11 +108,6 @@ export default function App() {
     }
   }
 
-  function reset(key) {
-    resetSession(threadsRef.current[key]?.sessionId);
-    dispatch({ type: "reset", key });
-  }
-
   async function unlock(key) {
     saveKey(key);
     setGateError(false);
@@ -143,7 +138,6 @@ export default function App() {
         modes={roster.modes}
         endpoints={roster.endpoints}
         onSend={(text) => send(currentKey, text)}
-        onReset={() => reset(currentKey)}
       />
     </div>
   );
