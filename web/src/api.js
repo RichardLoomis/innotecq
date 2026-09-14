@@ -19,6 +19,17 @@ export async function fetchRoster() {
   return res.json();
 }
 
+export async function login(password) {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (res.status === 429) return { ok: false, error: "Too many attempts. Wait a minute." };
+  const data = await res.json().catch(() => ({ ok: false }));
+  return { ok: !!data.ok };
+}
+
 export async function resetSession(session) {
   if (!session) return;
   try {

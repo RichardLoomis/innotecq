@@ -66,8 +66,11 @@ mock. Point both at the same model for a clean before/after.
   (the "Xenovia" mode).
 - `DIRECT_BASE_URL` / `DIRECT_API_KEY` / `DIRECT_MODEL` — the model provider
   called directly (the "Direct" mode). A mode's toggle is disabled until set.
-- `DEMO_PASSWORD` — optional access key. **Set it on any public deployment**:
-  without it, anyone with the URL can start conversations against your API keys.
+- `DEMO_PASSWORD` — password gate. When set, the console shows a login screen and
+  the API withholds everything (roster, modes, chat) until the visitor enters it;
+  the key is checked with a constant-time compare and login attempts are
+  rate-limited per IP. **Set it on any public deployment** — without it, anyone
+  with the URL can start conversations against your API keys.
 
 ## Grab UI elements while iterating
 

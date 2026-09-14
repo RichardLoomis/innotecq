@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPane from "./components/ChatPane.jsx";
 import AccessGate from "./components/AccessGate.jsx";
-import { fetchRoster, saveKey, streamChat } from "./api.js";
+import { fetchRoster, login, saveKey, streamChat } from "./api.js";
 import { uid } from "./util.js";
 
 const newThread = () => ({ items: [], sessionId: null, busy: false, started: false, incidents: 0 });
@@ -68,7 +68,7 @@ export default function App() {
   async function load() {
     const r = await fetchRoster();
     setRoster(r);
-    if (r.gated && !r.authorized) { setGateError(true); return; }
+    if (r.gated && !r.authorized) return;  // show the gate; no error until an attempt fails
     dispatch({ type: "init", threads: Object.fromEntries(r.agents.map((a) => [a.key, newThread()])) });
     setCurrentKey((k) => k || r.agents[0]?.key);
     if (!r.modes.proxy && r.modes.direct) setMode("direct");
@@ -109,6 +109,8 @@ export default function App() {
   }
 
   async function unlock(key) {
+    const { ok } = await login(key);
+    if (!ok) { setGateError(true); return; }
     saveKey(key);
     setGateError(false);
     await load();

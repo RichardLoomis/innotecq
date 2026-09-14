@@ -15,6 +15,7 @@ Both are real LLM endpoints; the toggle only changes the base URL. Also:
 
 from __future__ import annotations
 
+import hmac
 import json
 import pathlib
 import threading
@@ -37,10 +38,13 @@ MAX_CONCURRENT_CHATS = 8
 MAX_SESSIONS = 40
 MAX_MESSAGE_CHARS = 2000
 MAX_ITERS_PER_MESSAGE = 10
+LOGIN_WINDOW = 60.0          # seconds
+LOGIN_MAX_ATTEMPTS = 10      # per IP per window, to slow brute force
 
 app = FastAPI(title="Xenovia demo console")
 
 _sessions: dict[str, dict] = {}
+_login_hits: dict[str, list[float]] = {}
 _lock = threading.Lock()
 _active_chats = 0
 
@@ -72,9 +76,39 @@ def _endpoint(mode: str) -> dict | None:
     }
 
 
+def _demo_password() -> str:
+    return load_env().get("DEMO_PASSWORD", "")
+
+
+def _matches(supplied: str) -> bool:
+    """Constant-time comparison against the configured password."""
+    password = _demo_password()
+    if not password:
+        return True
+    return hmac.compare_digest(str(supplied).encode(), password.encode())
+
+
 def _authorized(request: Request) -> bool:
-    password = load_env().get("DEMO_PASSWORD", "")
-    return not password or request.headers.get("x-demo-key", "") == password
+    if not _demo_password():
+        return True
+    return _matches(request.headers.get("x-demo-key", ""))
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(ip: str) -> bool:
+    """Simple sliding-window guard on login attempts per client."""
+    now = time.time()
+    with _lock:
+        hits = [t for t in _login_hits.get(ip, []) if now - t < LOGIN_WINDOW]
+        hits.append(now)
+        _login_hits[ip] = hits
+        return len(hits) > LOGIN_MAX_ATTEMPTS
 
 
 def _get_session(session_id: str | None, agent_key: str) -> tuple[str, dict] | None:
@@ -106,12 +140,30 @@ def health() -> dict:
     return {"ok": True}
 
 
+@app.post("/api/login")
+async def login(request: Request) -> JSONResponse:
+    if _rate_limited(_client_ip(request)):
+        return JSONResponse({"ok": False, "error": "too many attempts, wait a minute"},
+                            status_code=429)
+    if not _demo_password():
+        return JSONResponse({"ok": True})
+    body = await request.json()
+    ok = _matches(body.get("password", ""))
+    return JSONResponse({"ok": ok}, status_code=200 if ok else 401)
+
+
 @app.get("/api/agents")
 def roster(request: Request) -> dict:
-    env = load_env()
+    gated = bool(_demo_password())
+    authorized = _authorized(request)
+    if gated and not authorized:
+        # withhold everything until the visitor authenticates
+        return {"gated": True, "authorized": False,
+                "modes": {"proxy": False, "direct": False},
+                "endpoints": {}, "agents": []}
     return {
-        "gated": bool(env.get("DEMO_PASSWORD")),
-        "authorized": _authorized(request),
+        "gated": gated,
+        "authorized": authorized,
         "modes": {
             "proxy": _endpoint("proxy") is not None,
             "direct": _endpoint("direct") is not None,
