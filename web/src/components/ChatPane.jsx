@@ -24,7 +24,7 @@ function statusText(mode, modes, endpoints) {
   };
 }
 
-export default function ChatPane({ agent, thread, mode, modes, endpoints, onMode, onSend, onReset }) {
+export default function ChatPane({ agent, thread, mode, modes, endpoints, onSend, onReset }) {
   const [draft, setDraft] = useState("");
   const configured = modes[mode];
   const busy = thread.busy;
@@ -48,7 +48,7 @@ export default function ChatPane({ agent, thread, mode, modes, endpoints, onMode
 
   return (
     <main className="chat">
-      <Topbar agent={agent} mode={mode} modes={modes} onMode={onMode} onReset={onReset} />
+      <Topbar agent={agent} onReset={onReset} />
       <div className="substatus" dangerouslySetInnerHTML={{ __html: sub }} />
       <div className="stage">
         {thread.started ? (

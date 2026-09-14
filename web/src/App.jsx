@@ -142,7 +142,6 @@ export default function App() {
         mode={mode}
         modes={roster.modes}
         endpoints={roster.endpoints}
-        onMode={setMode}
         onSend={(text) => send(currentKey, text)}
         onReset={() => reset(currentKey)}
       />
