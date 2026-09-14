@@ -35,7 +35,7 @@
   }
 
   * { box-sizing: border-box; }
-  html { color-scheme: dark; }
+  html { color-scheme: dark; zoom: 0.85; }  /* scale the whole UI down 15% */
   html, body { height: 100%; }
   #root { height: 100%; }
   body {
