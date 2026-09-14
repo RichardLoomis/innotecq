@@ -55,7 +55,7 @@ function reducer(state, a) {
 export default function App() {
   const [roster, setRoster] = useState(null);
   const [gateError, setGateError] = useState(false);
-  const [mode, setMode] = useState("governed");
+  const [mode, setMode] = useState("proxy");
   const [currentKey, setCurrentKey] = useState(null);
   const [threads, dispatch] = useReducer(reducer, {});
   const threadsRef = useRef(threads);
@@ -71,18 +71,18 @@ export default function App() {
     if (r.gated && !r.authorized) { setGateError(true); return; }
     dispatch({ type: "init", threads: Object.fromEntries(r.agents.map((a) => [a.key, newThread()])) });
     setCurrentKey((k) => k || r.agents[0]?.key);
-    if (!r.modes.governed && r.modes.ungoverned) setMode("ungoverned");
+    if (!r.modes.proxy && r.modes.direct) setMode("direct");
   }
 
   useEffect(() => {
     if (!roster) return;
-    document.body.dataset.regime = roster.modes[mode] ? mode : "governed";
+    document.body.dataset.regime = roster.modes[mode] ? mode : "proxy";
   }, [mode, roster]);
 
   async function send(key, text) {
     const t = threadsRef.current[key];
     if (!t || t.busy) return;
-    const regime = modeRef.current === "governed" ? "gov" : "ungov";
+    const regime = modeRef.current === "proxy" ? "gov" : "ungov";
     if (!t.started) dispatch({ type: "start", key });
     dispatch({ type: "busy", key, busy: true });
     dispatch({ type: "append", key, item: { id: uid(), kind: "user", text } });
@@ -135,6 +135,7 @@ export default function App() {
         thread={thread}
         mode={mode}
         modes={roster.modes}
+        onMode={setMode}
         onSend={(text) => send(currentKey, text)}
       />
     </div>

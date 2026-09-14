@@ -26,8 +26,9 @@ own dummy backend (ERP, directory, CRM, tables — seeded with the bait), and
 every reply is a live model call through the selected endpoint. Tool calls and
 their results render inline in the thread; when the agent does something a
 policy pack would stop, an incident block appears and the sidebar badge counts
-it. A header toggle switches between **Ungoverned** and **Governed by Xenovia**
-— the before/after in one click.
+it. A header toggle switches between **Xenovia** (model calls routed through the
+proxy) and **Direct** (straight to the model, no proxy), the before/after in one
+click. Both are real LangChain calls; only the base URL differs.
 
 There are no scripted scenarios: the red-team moments happen because the bait
 lives in the data (invoice `INV-2204`, ticket `T-102`, ticket `T-502`, request
@@ -58,11 +59,13 @@ npm --prefix web install && npm --prefix web run build
 uvicorn server:app --port 8000            # serves web/dist at /
 ```
 
-Environment (backend):
+Environment (backend). Both are real, OpenAI-compatible endpoints; there is no
+mock. Point both at the same model for a clean before/after.
 
-- `XENOVIA_BASE_URL` / `XENOVIA_API_KEY` / `XENOVIA_MODEL` — the governed tenant.
-- `UNGOVERNED_BASE_URL` / `UNGOVERNED_API_KEY` / `UNGOVERNED_MODEL` — optional
-  raw endpoint for the "before" run; the toggle is disabled without it.
+- `XENOVIA_BASE_URL` / `XENOVIA_API_KEY` / `XENOVIA_MODEL` — the Xenovia proxy
+  (the "Xenovia" mode).
+- `DIRECT_BASE_URL` / `DIRECT_API_KEY` / `DIRECT_MODEL` — the model provider
+  called directly (the "Direct" mode). A mode's toggle is disabled until set.
 - `DEMO_PASSWORD` — optional access key. **Set it on any public deployment**:
   without it, anyone with the URL can start conversations against your API keys.
 

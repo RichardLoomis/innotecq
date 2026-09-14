@@ -6,10 +6,10 @@ history, and every model call goes live through the endpoint behind the base
 URL. POST /api/chat streams NDJSON events for one user message; sessions
 persist in memory until reset.
 
-Environment (or .env locally):
-  XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_MODEL       the governed tenant
-  UNGOVERNED_BASE_URL / UNGOVERNED_API_KEY / UNGOVERNED_MODEL
-                                    optional raw endpoint for the before-run
+Two modes, toggled per message:
+  proxy  -> XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_MODEL   (via Xenovia)
+  direct -> DIRECT_BASE_URL / DIRECT_API_KEY / DIRECT_MODEL      (no proxy)
+Both are real LLM endpoints; the toggle only changes the base URL. Also:
   DEMO_PASSWORD          optional access key; set it on any public deployment
 """
 
@@ -46,15 +46,21 @@ _active_chats = 0
 
 
 def _endpoint(mode: str) -> dict | None:
+    """Resolve an LLM endpoint for a mode.
+
+    'proxy'  -> the Xenovia tenant proxy (XENOVIA_*): calls are governed.
+    'direct' -> straight to the model provider (DIRECT_*): no proxy, no policy.
+    Same LangChain agent, same model; the only difference is the base URL.
+    """
     env = load_env()
-    if mode == "ungoverned":
-        base_url = env.get("UNGOVERNED_BASE_URL")
+    if mode == "direct":
+        base_url = env.get("DIRECT_BASE_URL")
         if not base_url:
             return None
         return {
             "base_url": base_url,
-            "api_key": env.get("UNGOVERNED_API_KEY", ""),
-            "model": env.get("UNGOVERNED_MODEL") or env.get("XENOVIA_MODEL", DEFAULT_MODEL),
+            "api_key": env.get("DIRECT_API_KEY", ""),
+            "model": env.get("DIRECT_MODEL") or env.get("XENOVIA_MODEL", DEFAULT_MODEL),
         }
     base_url = env.get("XENOVIA_BASE_URL")
     if not base_url:
@@ -107,12 +113,12 @@ def roster(request: Request) -> dict:
         "gated": bool(env.get("DEMO_PASSWORD")),
         "authorized": _authorized(request),
         "modes": {
-            "governed": _endpoint("governed") is not None,
-            "ungoverned": _endpoint("ungoverned") is not None,
+            "proxy": _endpoint("proxy") is not None,
+            "direct": _endpoint("direct") is not None,
         },
         "endpoints": {
-            "governed": (_endpoint("governed") or {}).get("base_url"),
-            "ungoverned": (_endpoint("ungoverned") or {}).get("base_url"),
+            "proxy": (_endpoint("proxy") or {}).get("base_url"),
+            "direct": (_endpoint("direct") or {}).get("base_url"),
         },
         "agents": [
             {
@@ -165,7 +171,7 @@ async def chat(request: Request) -> StreamingResponse | JSONResponse:
     body = await request.json()
     agent_key = body.get("agent", "")
     text = str(body.get("message", "")).strip()
-    mode = body.get("mode", "governed")
+    mode = body.get("mode", "proxy")
 
     if agent_key not in AGENTS:
         return JSONResponse({"error": f"unknown agent '{agent_key}'"}, status_code=404)
@@ -174,13 +180,13 @@ async def chat(request: Request) -> StreamingResponse | JSONResponse:
     if len(text) > MAX_MESSAGE_CHARS:
         return JSONResponse({"error": f"message is over {MAX_MESSAGE_CHARS} characters"},
                             status_code=400)
-    if mode not in ("governed", "ungoverned"):
+    if mode not in ("proxy", "direct"):
         return JSONResponse({"error": f"unknown mode '{mode}'"}, status_code=400)
 
     endpoint = _endpoint(mode)
     if endpoint is None:
-        variable = "UNGOVERNED_BASE_URL" if mode == "ungoverned" else "XENOVIA_BASE_URL"
-        return JSONResponse({"error": f"{mode} endpoint is not configured — set {variable}"},
+        variable = "DIRECT_BASE_URL" if mode == "direct" else "XENOVIA_BASE_URL"
+        return JSONResponse({"error": f"{mode} endpoint is not configured, set {variable}"},
                             status_code=409)
 
     got = _get_session(body.get("session"), agent_key)

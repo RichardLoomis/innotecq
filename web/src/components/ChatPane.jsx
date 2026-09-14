@@ -4,7 +4,7 @@ import Hero from "./Hero.jsx";
 import Thread from "./Thread.jsx";
 import Composer from "./Composer.jsx";
 
-export default function ChatPane({ agent, thread, mode, modes, onSend }) {
+export default function ChatPane({ agent, thread, mode, modes, onMode, onSend }) {
   const [draft, setDraft] = useState("");
   const configured = modes[mode];
   const busy = thread.busy;
@@ -28,7 +28,7 @@ export default function ChatPane({ agent, thread, mode, modes, onSend }) {
 
   return (
     <main className="chat">
-      <Topbar agent={agent} />
+      <Topbar agent={agent} mode={mode} modes={modes} onMode={onMode} />
       <div className="stage">
         {thread.started ? (
           <Thread items={thread.items} busy={busy} />

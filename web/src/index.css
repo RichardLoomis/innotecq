@@ -27,7 +27,7 @@
     --sans: "Inter", system-ui, -apple-system, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, monospace;
   }
-  body[data-regime="ungoverned"] {
+  body[data-regime="direct"] {
     --accent: var(--amber);
     --accent-hi: var(--amber-hi);
     --accent-ink: var(--amber-ink);
