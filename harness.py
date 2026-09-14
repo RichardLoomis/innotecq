@@ -1,10 +1,13 @@
 """Shared demo harness: a plain OpenAI-compatible tool-calling loop.
 
 There is deliberately NO governance logic in this codebase. Whether an agent's
-risky action executes is decided by whatever sits behind XENOVIA_BASE_URL:
-point it at a raw model endpoint and everything the model asks for runs; point
-it at a Xenovia tenant and Xenovia decides. The agent code never changes —
-that is the demo.
+risky action executes is decided by whatever sits behind the base URL: point
+it at a raw model endpoint and everything the model asks for runs; point it at
+a Xenovia tenant and Xenovia decides. The agent code never changes — that is
+the demo.
+
+`run_agent_events` is the engine: it yields structured events (used by the web
+console in server.py). `run_agent` is the CLI wrapper that prints them.
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ import os
 import pathlib
 import sys
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Iterator
 
 ROOT = pathlib.Path(__file__).resolve().parent
 
@@ -45,9 +48,9 @@ def load_env() -> dict[str, str]:
                 continue
             key, value = line.split("=", 1)
             env[key.strip()] = value.strip()
-    for key in ("XENOVIA_BASE_URL", "XENOVIA_API_KEY", "XENOVIA_MODEL"):
-        if os.environ.get(key):
-            env[key] = os.environ[key]
+    for key, value in os.environ.items():
+        if key.startswith(("XENOVIA_", "UNGOVERNED_", "DEMO_")) and value:
+            env[key] = value
     return env
 
 
@@ -132,6 +135,74 @@ def _execute(tools: dict[str, Tool], name: str, args: dict) -> str:
         return f"error: {exc}"
 
 
+def run_agent_events(
+    agent: Agent,
+    scenario_key: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    max_turns: int = 14,
+) -> Iterator[dict]:
+    """Run one agent scenario, yielding structured events as it progresses."""
+    from openai import OpenAI  # imported lazily so `selftest` needs no packages
+
+    scenario = agent.scenarios[scenario_key]
+    world = agent.build(scenario_key)
+    tools = {t.name: t for t in world.tools()}
+
+    yield {
+        "type": "start",
+        "agent": agent.key,
+        "title": agent.title,
+        "scenario": scenario.key,
+        "blurb": scenario.blurb,
+        "task": scenario.task,
+        "endpoint": base_url,
+        "model": model,
+    }
+
+    messages: list = [
+        {"role": "system", "content": agent.system_prompt},
+        {"role": "user", "content": scenario.task},
+    ]
+    client = OpenAI(base_url=base_url, api_key=api_key or "xenovia-demo")
+
+    finished = False
+    for _ in range(max_turns):
+        try:
+            reply = (
+                client.chat.completions.create(model=model, messages=messages, tools=_schemas(tools))
+                .choices[0]
+                .message
+            )
+        except Exception as exc:
+            yield {"type": "error", "message": f"model call failed: {exc}"}
+            break
+        messages.append(reply)
+        if not reply.tool_calls:
+            yield {"type": "final", "text": reply.content or "(no final message)"}
+            finished = True
+            break
+        if reply.content:
+            yield {"type": "assistant", "text": _short(reply.content, 400)}
+        for call in reply.tool_calls:
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            yield {"type": "tool_call", "name": call.function.name, "args": args}
+            result = _execute(tools, call.function.name, args)
+            yield {"type": "tool_result", "name": call.function.name, "result": _short(result, 600)}
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+    else:
+        yield {"type": "turn_limit", "message": "stopped at the turn limit before the agent finished"}
+
+    yield {"type": "summary", "lines": world.summary()}
+    yield {"type": "incidents", "items": list(world.incidents)}
+    yield {"type": "done", "finished": finished}
+
+
 def run_agent(
     agent: Agent,
     scenario_key: str,
@@ -141,57 +212,38 @@ def run_agent(
     model: str,
     max_turns: int = 14,
 ) -> None:
-    from openai import OpenAI  # imported lazily so `selftest` needs no packages
-
-    scenario = agent.scenarios[scenario_key]
-    world = agent.build(scenario_key)
-    tools = {t.name: t for t in world.tools()}
-
-    print(f"{BOLD}{agent.title}{RESET} — scenario: {scenario.key}")
-    print(f"{DIM}{scenario.blurb}{RESET}")
-    print(f"{DIM}endpoint: {base_url}  ·  model: {model}{RESET}\n")
-
-    messages: list = [
-        {"role": "system", "content": agent.system_prompt},
-        {"role": "user", "content": scenario.task},
-    ]
-    client = OpenAI(base_url=base_url, api_key=api_key or "xenovia-demo")
-
-    for _ in range(max_turns):
-        reply = (
-            client.chat.completions.create(model=model, messages=messages, tools=_schemas(tools))
-            .choices[0]
-            .message
-        )
-        messages.append(reply)
-        if not reply.tool_calls:
-            print(f"\n{BOLD}agent:{RESET} {reply.content or '(no final message)'}")
-            break
-        if reply.content:
-            print(f"{DIM}agent: {_short(reply.content, 200)}{RESET}")
-        for call in reply.tool_calls:
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            pretty = ", ".join(f"{k}={_short(repr(v), 70)}" for k, v in args.items())
-            print(f"  {CYAN}▶ {call.function.name}({pretty}){RESET}")
-            result = _execute(tools, call.function.name, args)
-            print(f"    {DIM}{_short(result, 280)}{RESET}")
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    else:
-        print(f"\n{YELLOW}stopped at the turn limit before the agent finished{RESET}")
-
-    print(f"\n{BOLD}── outcome ──{RESET}")
-    for line in world.summary():
-        print(f"  {line}")
-    if world.incidents:
-        for incident in world.incidents:
-            print(f"  {RED}☠ INCIDENT: {incident}{RESET}")
-        print(f"\n  {YELLOW}Every line above is an action a Xenovia policy pack denies or escalates.{RESET}")
-        print(f"  {YELLOW}Same agent, same prompt — change the base URL to the governed tenant and rerun.{RESET}")
-    else:
-        print(f"  {GREEN}✔ no incidents recorded{RESET}")
+    """CLI front end: print the event stream as a live transcript."""
+    for event in run_agent_events(
+        agent, scenario_key, base_url=base_url, api_key=api_key, model=model, max_turns=max_turns
+    ):
+        kind = event["type"]
+        if kind == "start":
+            print(f"{BOLD}{event['title']}{RESET} — scenario: {event['scenario']}")
+            print(f"{DIM}{event['blurb']}{RESET}")
+            print(f"{DIM}endpoint: {event['endpoint']}  ·  model: {event['model']}{RESET}\n")
+        elif kind == "assistant":
+            print(f"{DIM}agent: {event['text']}{RESET}")
+        elif kind == "tool_call":
+            pretty = ", ".join(f"{k}={_short(repr(v), 70)}" for k, v in event["args"].items())
+            print(f"  {CYAN}▶ {event['name']}({pretty}){RESET}")
+        elif kind == "tool_result":
+            print(f"    {DIM}{_short(event['result'], 280)}{RESET}")
+        elif kind == "final":
+            print(f"\n{BOLD}agent:{RESET} {event['text']}")
+        elif kind in ("error", "turn_limit"):
+            print(f"\n{YELLOW}{event['message']}{RESET}")
+        elif kind == "summary":
+            print(f"\n{BOLD}── outcome ──{RESET}")
+            for line in event["lines"]:
+                print(f"  {line}")
+        elif kind == "incidents":
+            if event["items"]:
+                for incident in event["items"]:
+                    print(f"  {RED}☠ INCIDENT: {incident}{RESET}")
+                print(f"\n  {YELLOW}Every line above is an action a Xenovia policy pack denies or escalates.{RESET}")
+                print(f"  {YELLOW}Same agent, same prompt — change the base URL to the governed tenant and rerun.{RESET}")
+            else:
+                print(f"  {GREEN}✔ no incidents recorded{RESET}")
 
 
 def run_selftests(agents: list[Agent]) -> bool:

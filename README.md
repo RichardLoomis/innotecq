@@ -18,6 +18,41 @@ python3 -m pip install -r requirements.txt
 cp .env.example .env   # then set XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_MODEL
 ```
 
+## Web console
+
+`server.py` + `static/index.html` wrap the same agents in a live console: each
+agent runs independently (all four can run at once), streaming its transcript
+and outcome ledger, with a header toggle between **Ungoverned** and **Governed
+by Xenovia** — the before/after demo in one click.
+
+```bash
+uvicorn server:app --port 8000
+```
+
+Environment:
+
+- `XENOVIA_BASE_URL` / `XENOVIA_API_KEY` / `XENOVIA_MODEL` — the governed tenant.
+- `UNGOVERNED_BASE_URL` / `UNGOVERNED_API_KEY` / `UNGOVERNED_MODEL` — optional
+  raw endpoint for the "before" run; the toggle is disabled without it.
+- `DEMO_PASSWORD` — optional access key. **Set it on any public deployment**:
+  without it, anyone with the URL can start runs against your API keys.
+
+## Deploy on Railway
+
+The repo is deploy-ready: `railway.json` sets the start command and
+`/health` healthcheck; `.python-version` pins Python 3.12.
+
+```bash
+railway init
+railway up
+railway domain
+```
+
+Then set the environment variables above on the service (Railway dashboard →
+Variables, or `railway variables --set "XENOVIA_BASE_URL=..."`). Redeploys
+pick them up automatically; the base URL swap that closes the demo is an env
+var change in Railway.
+
 Before any live demo:
 
 ```bash
@@ -85,7 +120,10 @@ pack prevents.
 
 ```
 run_demo.py        CLI: list, selftest, or run an agent + scenario
-harness.py         shared tool-calling loop, transcript + outcome printing
+server.py          FastAPI console: streaming runs, mode toggle, access gate
+static/index.html  the console UI
+harness.py         shared tool-calling loop and event stream
 agents/            one file per agent: prompt, mocked backend, scenarios, selftests
+railway.json       Railway start command + healthcheck
 USE-CASES.md       the strategy doc: narrative, personas, why these four
 ```

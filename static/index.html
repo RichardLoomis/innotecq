@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xenovia console — Veldhoff Logistics demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #edebe6;
+    --card: #f7f5f1;
+    --ink: #1c2126;
+    --muted: #686f75;
+    --line: #c9c5bc;
+    --blue: #2544c4;
+    --blue-deep: #1d35a0;
+    --green: #1e7a5a;
+    --red: #c22e2a;
+    --red-wash: #f6e9e8;
+    --well: #23282e;
+    --well-text: #d7dce1;
+    --well-dim: #8b939c;
+    --well-call: #a9c6e8;
+    --well-err: #e9a6a3;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Archivo", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  a { color: var(--blue); }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, [role="radio"]:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  /* Masthead — set like the head of an official record */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 18px; }
+  .masthead-row { display: flex; flex-wrap: wrap; gap: 18px 32px; align-items: flex-end; justify-content: space-between; }
+  .wordmark { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .wordmark small { display: block; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-top: 7px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+
+  .mode { display: flex; border: 1.5px solid var(--ink); background: var(--card); }
+  .mode button {
+    border: 0; background: transparent; color: var(--ink);
+    padding: 8px 14px; font-weight: 600; font-size: 13.5px;
+  }
+  .mode button + button { border-left: 1.5px solid var(--ink); }
+  .mode button[aria-pressed="true"].ungoverned { background: var(--ink); color: var(--paper); }
+  .mode button[aria-pressed="true"].governed { background: var(--blue); color: #fff; }
+  .mode button:disabled { color: var(--muted); cursor: not-allowed; }
+
+  .run-all {
+    border: 1.5px solid var(--blue); color: var(--blue); background: transparent;
+    padding: 8px 14px; font-weight: 600; font-size: 13.5px;
+  }
+  .run-all:hover:enabled { background: var(--blue); color: #fff; }
+  .run-all:disabled { border-color: var(--line); color: var(--muted); cursor: not-allowed; }
+
+  .statusline { margin-top: 10px; font-size: 13.5px; color: var(--muted); min-height: 1.4em; }
+  .statusline.warn { color: var(--red); }
+  .statusline.gov { color: var(--blue-deep); }
+
+  /* Access gate */
+  .gate { max-width: 420px; margin: 80px auto; background: var(--card); border: 1.5px solid var(--ink); padding: 28px; }
+  .gate h2 { margin: 0 0 6px; font-size: 19px; }
+  .gate p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .gate form { display: flex; gap: 8px; }
+  .gate input {
+    flex: 1; border: 1.5px solid var(--ink); background: #fff; padding: 8px 10px;
+    font: inherit; font-size: 14px;
+  }
+  .gate button { border: 1.5px solid var(--blue); background: var(--blue); color: #fff; padding: 8px 16px; font-weight: 600; }
+  .gate .bad { color: var(--red); font-size: 13.5px; margin-top: 10px; }
+
+  /* Agent cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 26px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .agent { background: var(--card); border: 1.5px solid var(--ink); display: flex; flex-direction: column; }
+  .agent-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+  .agent-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .agent-head .episode { font-weight: 400; font-style: italic; color: var(--muted); }
+  .agent-head p { margin: 5px 0 0; font-size: 13.5px; color: var(--muted); }
+
+  .agent-run { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; padding: 12px 16px; }
+  .scenarios { display: flex; border: 1px solid var(--ink); }
+  .scenarios button { border: 0; background: transparent; padding: 6px 11px; font-size: 13px; font-weight: 550; color: var(--ink); }
+  .scenarios button + button { border-left: 1px solid var(--ink); }
+  .scenarios button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .scenarios button[aria-pressed="true"].red { background: var(--red); color: #fff; }
+  .run-btn {
+    margin-left: auto; border: 1.5px solid var(--blue); background: var(--blue); color: #fff;
+    padding: 6px 16px; font-weight: 600; font-size: 13.5px;
+  }
+  .run-btn:disabled { background: var(--card); border-color: var(--line); color: var(--muted); cursor: progress; }
+  .scenario-blurb { padding: 0 16px 10px; font-size: 13px; color: var(--muted); }
+
+  .via { padding: 0 16px 8px; font-size: 12.5px; color: var(--muted); }
+  .via .gov { color: var(--blue-deep); font-weight: 550; }
+  .via .ungov { color: var(--red); font-weight: 550; }
+
+  .well {
+    margin: 0 16px; background: var(--well); color: var(--well-text);
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.55;
+    padding: 12px 14px; height: 230px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .well .dim { color: var(--well-dim); }
+  .well .call { color: var(--well-call); }
+  .well .err { color: var(--well-err); }
+  .well .fin { color: #fff; font-weight: 500; }
+  .well .empty { color: var(--well-dim); }
+
+  .outcome { position: relative; padding: 12px 16px 16px; min-height: 74px; }
+  .outcome h3 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+  .outcome .lines { font-size: 13px; color: var(--muted); }
+  .outcome .lines div { padding: 1px 0; }
+  .incident {
+    margin-top: 8px; padding: 7px 10px; background: var(--red-wash);
+    border-left: 3px solid var(--red); color: var(--red); font-size: 13px; font-weight: 550;
+  }
+  .note { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+
+  .stamp {
+    position: absolute; top: 8px; right: 14px; transform: rotate(-4deg);
+    border: 2.5px solid; padding: 3px 10px;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.12em;
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+  }
+  .stamp.clean { color: var(--green); border-color: var(--green); }
+  .stamp.dirty { color: var(--red); border-color: var(--red); }
+  @media (prefers-reduced-motion: no-preference) {
+    .stamp { animation: thunk 180ms ease-out; }
+    @keyframes thunk { from { transform: rotate(-4deg) scale(1.35); opacity: 0; } to { transform: rotate(-4deg) scale(1); opacity: 1; } }
+    .running .run-btn:disabled { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.55; } }
+  }
+
+  footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="masthead-row">
+      <div class="wordmark">Xenovia
+        <small>Runtime governance console · Veldhoff Logistics GmbH demonstration</small>
+      </div>
+      <div class="controls">
+        <div class="mode" role="group" aria-label="Endpoint mode">
+          <button class="ungoverned" id="mode-ungoverned" aria-pressed="false">Ungoverned</button>
+          <button class="governed" id="mode-governed" aria-pressed="true">Governed by Xenovia</button>
+        </div>
+        <button class="run-all" id="run-all">Run all four</button>
+      </div>
+    </div>
+    <div class="statusline" id="statusline"></div>
+  </header>
+
+  <div id="gate" class="gate" hidden>
+    <h2>Access key required</h2>
+    <p>This console can start live agent runs. Enter the demo access key to continue.</p>
+    <form id="gate-form">
+      <input id="gate-input" type="password" autocomplete="off" aria-label="Demo access key">
+      <button type="submit">Unlock</button>
+    </form>
+    <div class="bad" id="gate-bad" hidden>That key was not accepted.</div>
+  </div>
+
+  <main class="grid" id="grid"></main>
+
+  <footer>
+    Four agents, four isolated runs — a fresh backend per run, streaming live.
+    No governance logic exists in the agent code; whether a risky action executes
+    is decided by the endpoint behind the base URL. All companies, people, and
+    records in this demonstration are fictional.
+  </footer>
+</div>
+
+<script>
+const EPISODE_LABEL = {
+  fraud: "Injected invoice",
+  privesc: "Emergency admin request",
+  gdpr: "Data-fishing ticket",
+  residency: "US export request",
+  normal: "Routine queue",
+};
+
+const state = { roster: null, mode: "governed", cards: {} };
+
+function demoKey() { try { return localStorage.getItem("xenovia-demo-key") || ""; } catch { return ""; } }
+function saveKey(k) { try { localStorage.setItem("xenovia-demo-key", k); } catch {} }
+function headers() {
+  const h = { "content-type": "application/json" };
+  const k = demoKey();
+  if (k) h["x-demo-key"] = k;
+  return h;
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function host(url) { try { return new URL(url).host; } catch { return url; } }
+
+async function init() {
+  const res = await fetch("/api/agents", { headers: headers() });
+  state.roster = await res.json();
+  const gate = document.getElementById("gate");
+  if (state.roster.gated && !state.roster.authorized) {
+    gate.hidden = false;
+    document.getElementById("grid").hidden = true;
+    return;
+  }
+  gate.hidden = true;
+  document.getElementById("grid").hidden = false;
+  if (!state.roster.modes.governed && state.roster.modes.ungoverned) state.mode = "ungoverned";
+  buildCards();
+  renderMode();
+}
+
+document.getElementById("gate-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  saveKey(document.getElementById("gate-input").value.trim());
+  await init();
+  if (state.roster.gated && !state.roster.authorized) document.getElementById("gate-bad").hidden = false;
+});
+
+function renderMode() {
+  const m = state.roster.modes;
+  const bU = document.getElementById("mode-ungoverned");
+  const bG = document.getElementById("mode-governed");
+  bU.disabled = !m.ungoverned;
+  bG.disabled = !m.governed;
+  bU.setAttribute("aria-pressed", String(state.mode === "ungoverned"));
+  bG.setAttribute("aria-pressed", String(state.mode === "governed"));
+  bU.title = m.ungoverned ? "" : "Set UNGOVERNED_BASE_URL to enable the before-run";
+  bG.title = m.governed ? "" : "Set XENOVIA_BASE_URL to enable the governed run";
+  const s = document.getElementById("statusline");
+  if (state.mode === "governed" && m.governed) {
+    s.className = "statusline gov";
+    s.textContent = "Actions decided by Xenovia — tenant " + host(state.roster.endpoints.governed) + ". Denials and traces appear in the tenant console.";
+  } else if (state.mode === "ungoverned" && m.ungoverned) {
+    s.className = "statusline warn";
+    s.textContent = "No policy layer attached. Every action the model requests will execute.";
+  } else {
+    s.className = "statusline warn";
+    s.textContent = "No endpoint configured. Set XENOVIA_BASE_URL (and optionally UNGOVERNED_BASE_URL) in the service environment.";
+  }
+  document.getElementById("run-all").disabled = !m[state.mode];
+  for (const c of Object.values(state.cards)) c.runBtn.disabled = !m[state.mode] || c.running;
+}
+
+document.getElementById("mode-ungoverned").addEventListener("click", () => { state.mode = "ungoverned"; renderMode(); });
+document.getElementById("mode-governed").addEventListener("click", () => { state.mode = "governed"; renderMode(); });
+document.getElementById("run-all").addEventListener("click", () => {
+  for (const c of Object.values(state.cards)) if (!c.running) runCard(c);
+});
+
+function buildCards() {
+  const grid = document.getElementById("grid");
+  grid.textContent = "";
+  for (const agent of state.roster.agents) {
+    const card = el("section", "agent");
+    const parts = agent.title.split(" — ");
+    const head = el("div", "agent-head");
+    const h2 = el("h2", "", parts[0].replace(" agent", ""));
+    if (parts[1]) { h2.append(" "); h2.append(el("span", "episode", parts[1])); }
+    head.append(h2, el("p", "", agent.tagline));
+    card.append(head);
+
+    const c = { agent, scenario: agent.scenarios.find((s) => s.red_team)?.key || "normal", running: false };
+
+    const runRow = el("div", "agent-run");
+    const seg = el("div", "scenarios");
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", "Scenario");
+    for (const s of agent.scenarios) {
+      const b = el("button", s.red_team ? "red" : "", EPISODE_LABEL[s.key] || s.key);
+      b.addEventListener("click", () => { c.scenario = s.key; syncScenario(c); });
+      b.dataset.key = s.key;
+      seg.append(b);
+    }
+    c.seg = seg;
+    c.runBtn = el("button", "run-btn", "Run scenario");
+    c.runBtn.addEventListener("click", () => runCard(c));
+    runRow.append(seg, c.runBtn);
+    card.append(runRow);
+
+    c.blurb = el("div", "scenario-blurb");
+    card.append(c.blurb);
+
+    c.via = el("div", "via");
+    card.append(c.via);
+
+    c.well = el("div", "well");
+    c.well.append(el("div", "empty", "No run yet — the live transcript streams here."));
+    card.append(c.well);
+
+    c.outcome = el("div", "outcome");
+    card.append(c.outcome);
+
+    state.cards[agent.key] = c;
+    grid.append(card);
+    syncScenario(c);
+  }
+}
+
+function syncScenario(c) {
+  for (const b of c.seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.key === c.scenario));
+  const s = c.agent.scenarios.find((x) => x.key === c.scenario);
+  c.blurb.textContent = s ? s.blurb : "";
+}
+
+function wellLine(c, cls, text) {
+  const first = c.well.querySelector(".empty");
+  if (first) first.remove();
+  c.well.append(el("div", cls, text));
+  c.well.scrollTop = c.well.scrollHeight;
+}
+
+function fmtArgs(args) {
+  return Object.entries(args)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(", ");
+}
+
+async function runCard(c) {
+  if (c.running || !state.roster.modes[state.mode]) return;
+  c.running = true;
+  const card = c.runBtn.closest(".agent");
+  card.classList.add("running");
+  c.runBtn.disabled = true;
+  c.runBtn.textContent = "Running…";
+  c.well.textContent = "";
+  c.outcome.textContent = "";
+  const mode = state.mode;
+  c.lastMode = mode;
+  c.via.innerHTML = "";
+  const modeSpan = el("span", mode === "governed" ? "gov" : "ungov",
+    mode === "governed" ? "governed by Xenovia" : "ungoverned");
+  c.via.append("Run: ", el("span", "", EPISODE_LABEL[c.scenario] || c.scenario), " · ", modeSpan,
+    " · via " + host(state.roster.endpoints[mode]));
+
+  try {
+    const res = await fetch("/api/run", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ agent: c.agent.key, scenario: c.scenario, mode }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ error: res.statusText }));
+      wellLine(c, "err", "run refused: " + (e.error || res.status));
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line) handleEvent(c, JSON.parse(line));
+      }
+    }
+  } catch (err) {
+    wellLine(c, "err", "stream failed: " + err.message);
+  } finally {
+    c.running = false;
+    card.classList.remove("running");
+    c.runBtn.textContent = "Run scenario";
+    c.runBtn.disabled = !state.roster.modes[state.mode];
+  }
+}
+
+function handleEvent(c, ev) {
+  switch (ev.type) {
+    case "start":
+      wellLine(c, "dim", `task: ${ev.task}`);
+      wellLine(c, "dim", `model: ${ev.model}`);
+      break;
+    case "assistant":
+      wellLine(c, "", "agent: " + ev.text);
+      break;
+    case "tool_call":
+      wellLine(c, "call", `▸ ${ev.name}(${fmtArgs(ev.args)})`);
+      break;
+    case "tool_result":
+      wellLine(c, "dim", "  " + ev.result);
+      break;
+    case "final":
+      wellLine(c, "fin", "agent: " + ev.text);
+      break;
+    case "error":
+    case "turn_limit":
+      wellLine(c, "err", ev.message);
+      break;
+    case "summary": {
+      const h = el("h3", "", "Outcome");
+      const lines = el("div", "lines");
+      for (const line of ev.lines) lines.append(el("div", "", line));
+      c.outcome.append(h, lines);
+      break;
+    }
+    case "incidents": {
+      if (ev.items.length) {
+        for (const item of ev.items) c.outcome.append(el("div", "incident", item));
+        c.outcome.append(el("div", "note", c.lastMode === "governed"
+          ? "The tenant let these actions through — review this agent's policy pack in the Xenovia console."
+          : "Each entry is an action a Xenovia policy pack denies or escalates. Same agent, same prompt — switch to Governed by Xenovia and rerun."));
+        c.outcome.append(el("div", "stamp dirty", ev.items.length + (ev.items.length === 1 ? " INCIDENT" : " INCIDENTS")));
+      } else {
+        c.outcome.append(el("div", "stamp clean", "CLEAN"));
+      }
+      break;
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
