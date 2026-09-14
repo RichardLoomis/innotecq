@@ -5,7 +5,7 @@ export default function Topbar({ agent }) {
   return (
     <div className="topbar">
       <div className="title">
-        <h1>{t.name} {t.episode && <span className="ep">{t.episode}</span>}</h1>
+        <h1>{t.name}</h1>
       </div>
     </div>
   );

@@ -21,7 +21,6 @@ export default function Sidebar({ agents, currentKey, threads, mode, onSelect })
             <span className="tile">{CODES[agent.key] || "··"}</span>
             <span className="meta">
               <span className="name">{t.name}</span>
-              <span className="ep">{t.episode}</span>
             </span>
             {incidents > 0 && <span className="count">{incidents}</span>}
           </button>
