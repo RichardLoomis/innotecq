@@ -1,4 +1,4 @@
-"""Shared demo harness: a plain OpenAI-compatible tool-calling loop.
+"""Shared demo harness: a LangChain tool-calling loop.
 
 There is deliberately NO governance logic in this codebase. Whether an agent's
 risky action executes is decided by whatever sits behind the base URL: point
@@ -12,7 +12,6 @@ console in server.py). `run_agent` is the CLI wrapper that prints them.
 
 from __future__ import annotations
 
-import json
 import os
 import pathlib
 import sys
@@ -152,40 +151,43 @@ def continue_events(
 ) -> Iterator[dict]:
     """Drive the agent loop until it answers (or errors), yielding events.
 
-    `messages` is mutated in place, so a caller holding a chat session can
-    append the next user message and call this again to continue the same
-    conversation against the same world.
+    `messages` is a list of LangChain messages (System/Human/AI/Tool), mutated
+    in place, so a caller holding a chat session can append the next
+    HumanMessage and call this again to continue the same conversation against
+    the same world.
+
+    LangChain's ChatOpenAI points at the Xenovia proxy via base_url, so every
+    model call is governed exactly as before — the framework changes, the
+    integration point does not.
     """
-    from openai import OpenAI  # imported lazily so `selftest` needs no packages
+    # imported lazily so `selftest` needs no packages installed
+    from langchain_core.messages import ToolMessage
+    from langchain_openai import ChatOpenAI
 
     tools = {t.name: t for t in world.tools()}
-    client = OpenAI(base_url=base_url, api_key=api_key or "xenovia-demo")
+    llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key or "xenovia-demo")
+    llm = llm.bind_tools(_schemas(tools))
 
     for _ in range(max_iters):
         try:
-            reply = (
-                client.chat.completions.create(model=model, messages=messages, tools=_schemas(tools))
-                .choices[0]
-                .message
-            )
+            reply = llm.invoke(messages)
         except Exception as exc:
             yield {"type": "error", "message": f"model call failed: {exc}"}
             return
         messages.append(reply)
+        content = reply.content if isinstance(reply.content, str) else str(reply.content or "")
         if not reply.tool_calls:
-            yield {"type": "final", "text": reply.content or "(no reply)"}
+            yield {"type": "final", "text": content or "(no reply)"}
             return
-        if reply.content:
-            yield {"type": "assistant", "text": _short(reply.content, 400)}
+        if content:
+            yield {"type": "assistant", "text": _short(content, 400)}
         for call in reply.tool_calls:
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            yield {"type": "tool_call", "name": call.function.name, "args": args}
-            result = _execute(tools, call.function.name, args)
-            yield {"type": "tool_result", "name": call.function.name, "result": _short(result, 600)}
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+            name = call["name"]
+            args = call.get("args") or {}
+            yield {"type": "tool_call", "name": name, "args": args}
+            result = _execute(tools, name, args)
+            yield {"type": "tool_result", "name": name, "result": _short(result, 600)}
+            messages.append(ToolMessage(content=result, tool_call_id=call.get("id") or name))
     yield {"type": "turn_limit", "message": "stopped at the loop limit before the agent finished"}
 
 
@@ -213,9 +215,11 @@ def run_agent_events(
         "model": model,
     }
 
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     messages: list = [
-        {"role": "system", "content": agent.system_prompt},
-        {"role": "user", "content": scenario.task},
+        SystemMessage(content=agent.system_prompt),
+        HumanMessage(content=scenario.task),
     ]
     finished = False
     for event in continue_events(

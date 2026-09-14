@@ -25,6 +25,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from agents import AGENTS
 from harness import continue_events, load_env
 
@@ -86,7 +88,7 @@ def _get_session(session_id: str | None, agent_key: str) -> tuple[str, dict] | N
         _sessions[new_id] = {
             "agent": agent_key,
             "world": agent.chat_world(),
-            "messages": [{"role": "system", "content": agent.system_prompt}],
+            "messages": [SystemMessage(content=agent.system_prompt)],
             "busy": False,
             "last_used": time.time(),
         }
@@ -129,7 +131,7 @@ def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
     world = session["world"]
     try:
         yield json.dumps({"type": "session", "id": session_id}) + "\n"
-        session["messages"].append({"role": "user", "content": text})
+        session["messages"].append(HumanMessage(content=text))
         seen = len(world.incidents)
         for event in continue_events(
             world,

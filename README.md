@@ -1,15 +1,15 @@
 # Xenovia demo agents — Innotecq partner pack
 
 Four enterprise agents at a fictional EU mid-cap (**Veldhoff Logistics GmbH**,
-Hamburg — all names, customers, and IBANs are invented). Each agent is a plain
-OpenAI-compatible tool-calling loop over a mocked backend, with a `normal`
-scenario and a scripted red-team scenario. Strategy and personas per agent:
-[USE-CASES.md](USE-CASES.md).
+Hamburg; all names, customers, and IBANs are invented). Each agent is a
+LangChain tool-calling loop (`ChatOpenAI` + `bind_tools`) over a mocked
+backend, with a `normal` scenario and a scripted red-team scenario. Strategy
+and personas per agent: [USE-CASES.md](USE-CASES.md).
 
 **The point of the architecture:** there is no governance logic anywhere in
-this code. Whether a risky action executes is decided by whatever sits behind
-`XENOVIA_BASE_URL` — a raw model endpoint executes everything; a Xenovia
-tenant decides. The integration is the URL.
+this code. LangChain's `ChatOpenAI` points at `XENOVIA_BASE_URL`, so whatever
+sits behind it decides whether a risky action executes: a raw model endpoint
+runs everything, a Xenovia tenant governs it. The integration is the URL.
 
 ## Setup
 
@@ -158,7 +158,7 @@ pack prevents.
 
 ```
 server.py          FastAPI: /api chat streaming, sessions, gate; serves web/dist
-harness.py         shared tool-calling loop and event stream (continue_events)
+harness.py         LangChain tool-calling loop and event stream (continue_events)
 agents/            one file per agent: prompt, dummy backend, starters, selftests
 web/               React UI (Vite) — components in web/src/components/
   src/App.jsx      state, streaming reducer, agent switching
