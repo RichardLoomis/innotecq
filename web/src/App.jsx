@@ -127,7 +127,6 @@ export default function App() {
         agents={roster.agents}
         currentKey={currentKey}
         threads={threads}
-        mode={mode}
         onSelect={setCurrentKey}
       />
       <ChatPane

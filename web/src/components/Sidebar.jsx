@@ -1,11 +1,11 @@
 import { CODES, splitTitle } from "../util.js";
 
-export default function Sidebar({ agents, currentKey, threads, mode, onSelect }) {
+export default function Sidebar({ agents, currentKey, threads, onSelect }) {
   return (
     <nav className="sidebar">
       <div className="brand">
         <span className="mark" />
-        <span className="name">Xenovia<span> · console</span></span>
+        <span className="name">Xenovia</span>
       </div>
       <div className="side-label">Agents</div>
       {agents.map((agent) => {
@@ -26,9 +26,6 @@ export default function Sidebar({ agents, currentKey, threads, mode, onSelect })
           </button>
         );
       })}
-      <div className="sidebar-foot">
-        <b>{mode === "governed" ? "Governed by Xenovia" : "Ungoverned"}</b>
-      </div>
     </nav>
   );
 }

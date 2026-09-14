@@ -4,21 +4,11 @@ import Hero from "./Hero.jsx";
 import Thread from "./Thread.jsx";
 import Composer from "./Composer.jsx";
 
-function statusText(mode, modes) {
-  if (mode === "governed" && modes.governed) {
-    return { sub: "Governed by <b>Xenovia</b>", hint: "Enter to send" };
-  }
-  if (mode === "ungoverned" && modes.ungoverned) {
-    return { sub: "<b>Ungoverned</b>", hint: "Enter to send" };
-  }
-  return { sub: "No endpoint configured", hint: "" };
-}
-
 export default function ChatPane({ agent, thread, mode, modes, onSend }) {
   const [draft, setDraft] = useState("");
   const configured = modes[mode];
   const busy = thread.busy;
-  const { sub, hint } = statusText(mode, modes);
+  const hint = configured ? "Enter to send" : "";
 
   function submit() {
     const text = draft.trim();
@@ -39,7 +29,6 @@ export default function ChatPane({ agent, thread, mode, modes, onSend }) {
   return (
     <main className="chat">
       <Topbar agent={agent} />
-      <div className="substatus" dangerouslySetInnerHTML={{ __html: sub }} />
       <div className="stage">
         {thread.started ? (
           <Thread items={thread.items} busy={busy} />
