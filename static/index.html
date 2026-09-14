@@ -6,196 +6,273 @@
 <title>Xenovia console — Veldhoff Logistics demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* ── Design tokens ─────────────────────────────────────────────── */
   :root {
-    --paper: #edebe6;
-    --pane: #fbfaf8;
-    --ink: #1c2126;
-    --muted: #6a7076;
-    --line: #ddd9d0;
-    --line-strong: #c9c5bc;
-    --blue: #2544c4;
-    --blue-deep: #1d35a0;
-    --blue-wash: #e9edfa;
-    --green: #1e7a5a;
-    --red: #c22e2a;
-    --red-wash: #f6e9e8;
-    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    /* ground */
+    --bg: #eceae3;
+    --surface: #fbfaf7;
+    --surface-2: #f3f1eb;
+    --ink: #191d21;
+    --ink-2: #4c5359;
+    --ink-3: #81878c;
+    --rule: #d8d4ca;
+    --rule-2: #b9b4a7;
+    /* machine tape */
+    --tape: #1e2328;
+    --tape-text: #cfd5da;
+    --tape-dim: #848c94;
+    --tape-err: #e9a6a3;
+    /* records: fixed colors, never regime-dependent */
+    --gov: #2646c8;       --gov-deep: #1b34a2;
+    --gov-wash: #e8edfb;  --gov-edge: #c9d4f2;  --gov-tape: #9fb9f0;
+    --ungov: #b4610f;     --ungov-deep: #8f4d0a;
+    --ungov-wash: #f7edda;--ungov-edge: #e2cba0;--ungov-tape: #e0b269;
+    --alarm: #c22e2a;     --alarm-wash: #f6e9e8;
+    --clear: #1e7a5a;
+    /* live regime (JS flips these via [data-regime]) */
+    --accent: var(--gov);
+    --accent-deep: var(--gov-deep);
+    --accent-wash: var(--gov-wash);
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Archivo", system-ui, sans-serif;
   }
+  body[data-regime="ungoverned"] {
+    --accent: var(--ungov);
+    --accent-deep: var(--ungov-deep);
+    --accent-wash: var(--ungov-wash);
+  }
+
   * { box-sizing: border-box; }
   html { color-scheme: light; }
   html, body { height: 100%; }
   body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: "Archivo", system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 14.5px; line-height: 1.55;
   }
-  button { font: inherit; cursor: pointer; }
+  button { font: inherit; cursor: pointer; color: inherit; }
   button:focus-visible, textarea:focus-visible, input:focus-visible {
-    outline: 2px solid var(--blue); outline-offset: 2px;
+    outline: 2px solid var(--accent); outline-offset: 2px;
   }
 
   .shell { display: flex; flex-direction: column; height: 100dvh; }
 
-  /* Top bar */
+  /* ── Masthead ──────────────────────────────────────────────────── */
   .topbar {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 10px 18px; border-bottom: 1.5px solid var(--ink); background: var(--paper);
+    display: flex; align-items: center; gap: 20px;
+    padding: 12px 20px; background: var(--bg);
   }
-  .wordmark { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
-  .wordmark small { font-weight: 500; font-size: 12.5px; color: var(--muted); margin-left: 10px; letter-spacing: 0; }
+  .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+  .wordmark small {
+    display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+    letter-spacing: 0.01em; margin-top: 1px;
+  }
   .topbar .spacer { flex: 1; }
-  .mode { display: flex; border: 1.5px solid var(--ink); background: var(--pane); }
-  .mode button { border: 0; background: transparent; color: var(--ink); padding: 5px 12px; font-weight: 600; font-size: 12.5px; }
-  .mode button + button { border-left: 1.5px solid var(--ink); }
-  .mode button[aria-pressed="true"].ungoverned { background: var(--ink); color: var(--paper); }
-  .mode button[aria-pressed="true"].governed { background: var(--blue); color: #fff; }
-  .mode button:disabled { color: var(--muted); cursor: not-allowed; }
-  .statusline { width: 100%; font-size: 12.5px; color: var(--muted); }
-  .statusline.gov { color: var(--blue-deep); }
-  .statusline.warn { color: var(--red); }
 
-  /* Access gate */
-  .gate { max-width: 420px; margin: 80px auto; background: var(--pane); border: 1.5px solid var(--ink); padding: 28px; }
+  .regime { display: flex; border: 1.5px solid var(--ink); background: var(--surface); }
+  .regime button {
+    display: flex; align-items: center; gap: 8px;
+    border: 0; background: transparent; padding: 7px 14px;
+    font-weight: 600; font-size: 12.5px; color: var(--ink-2);
+  }
+  .regime button + button { border-left: 1.5px solid var(--ink); }
+  .regime .lamp { width: 8px; height: 8px; background: var(--rule-2); }
+  .regime button[aria-pressed="true"] { color: #fff; }
+  .regime button[aria-pressed="true"].r-ungov { background: var(--ungov); }
+  .regime button[aria-pressed="true"].r-gov { background: var(--gov); }
+  .regime button[aria-pressed="true"] .lamp { background: #fff; }
+  .regime button:disabled { color: var(--ink-3); cursor: not-allowed; }
+
+  .band { height: 4px; background: var(--gov); }
+  body[data-regime="ungoverned"] .band {
+    background: repeating-linear-gradient(-45deg, #c88a2e 0 10px, #2a2c2e 10px 20px);
+  }
+  body[data-regime="none"] .band { background: var(--rule-2); }
+
+  .statusbar {
+    padding: 6px 20px; font-size: 12.5px; background: var(--surface-2);
+    border-bottom: 1px solid var(--rule);
+  }
+  .statusbar.gov { color: var(--gov-deep); }
+  .statusbar.warn { color: var(--ungov-deep); }
+  .statusbar.err { color: var(--alarm); }
+
+  /* ── Access gate ───────────────────────────────────────────────── */
+  .gate { max-width: 420px; margin: 80px auto; background: var(--surface); border: 1.5px solid var(--ink); padding: 28px; }
   .gate h2 { margin: 0 0 6px; font-size: 19px; }
-  .gate p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .gate p { margin: 0 0 16px; color: var(--ink-2); font-size: 14px; }
   .gate form { display: flex; gap: 8px; }
   .gate input { flex: 1; border: 1.5px solid var(--ink); background: #fff; padding: 8px 10px; font: inherit; font-size: 14px; }
-  .gate button { border: 1.5px solid var(--blue); background: var(--blue); color: #fff; padding: 8px 16px; font-weight: 600; }
-  .gate .bad { color: var(--red); font-size: 13.5px; margin-top: 10px; }
+  .gate button { border: 1.5px solid var(--gov); background: var(--gov); color: #fff; padding: 8px 16px; font-weight: 600; }
+  .gate .bad { color: var(--alarm); font-size: 13px; margin-top: 10px; }
 
-  /* Body: sidebar + chat */
+  /* ── Body: sidebar + chat ──────────────────────────────────────── */
   .body { display: flex; flex: 1; min-height: 0; }
+
   .sidebar {
-    width: 230px; flex: none; border-right: 1px solid var(--line-strong);
-    padding: 14px 10px; overflow-y: auto;
+    width: 248px; flex: none; overflow-y: auto;
+    padding: 16px 12px; border-right: 1px solid var(--rule-2);
   }
-  .sidebar h2 { margin: 2px 8px 10px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .sidebar h2 { margin: 0 8px 10px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
   .agent-item {
-    display: block; width: 100%; text-align: left; background: transparent;
-    border: 0; border-left: 3px solid transparent; padding: 9px 10px; margin-bottom: 2px;
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    background: transparent; border: 0; border-left: 3px solid transparent;
+    padding: 9px 9px; margin-bottom: 2px;
   }
-  .agent-item .name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-  .agent-item .ep { font-size: 12px; color: var(--muted); font-style: italic; }
-  .agent-item:hover { background: rgba(0,0,0,0.04); }
-  .agent-item[aria-current="true"] { background: var(--pane); border-left-color: var(--blue); }
-  .badge {
-    background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
-    padding: 1px 7px; border-radius: 999px; margin-left: auto;
+  .agent-item:hover { background: rgba(25,29,33,0.05); }
+  .agent-item[aria-current="true"] { background: var(--surface); border-left-color: var(--ink); }
+  .tile {
+    flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+    border: 1.5px solid var(--ink); font-family: var(--mono);
+    font-size: 11px; font-weight: 600; background: var(--surface);
+  }
+  .agent-item[aria-current="true"] .tile { background: var(--ink); color: var(--bg); }
+  .agent-item .meta { min-width: 0; }
+  .agent-item .name { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+  .agent-item .ep { font-size: 11.5px; color: var(--ink-3); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .count {
+    margin-left: auto; flex: none; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    background: var(--alarm); color: #fff; padding: 2px 7px; border-radius: 999px;
   }
 
-  /* Chat pane */
-  .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--pane); }
+  /* ── Chat pane ─────────────────────────────────────────────────── */
+  .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
   .chat-head {
-    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-    padding: 12px 22px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 14px 24px 12px; border-bottom: 1px solid var(--rule);
   }
-  .chat-head h1 { margin: 0; font-size: 16.5px; font-weight: 650; }
-  .chat-head .ep { font-style: italic; color: var(--muted); font-weight: 400; }
-  .chat-head .tag { font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+  .chat-head h1 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -0.01em; }
+  .chat-head .ep { font-style: italic; color: var(--ink-3); font-weight: 400; font-size: 15px; }
   .reset {
-    margin-left: auto; border: 1px solid var(--line-strong); background: transparent;
-    color: var(--muted); padding: 4px 12px; font-size: 12.5px; font-weight: 550;
+    margin-left: auto; border: 1px solid var(--rule-2); background: transparent;
+    color: var(--ink-2); padding: 4px 12px; font-size: 12px; font-weight: 550;
   }
   .reset:hover { border-color: var(--ink); color: var(--ink); }
 
   .threads { flex: 1; min-height: 0; position: relative; }
-  .thread { position: absolute; inset: 0; overflow-y: auto; padding: 22px 22px 30px; }
+  .thread { position: absolute; inset: 0; overflow-y: auto; padding: 24px 24px 32px; }
   .thread[hidden] { display: none; }
-  .thread-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .thread-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 
-  .intro { margin: 8vh auto 0; text-align: center; max-width: 480px; }
-  .intro h3 { font-size: 21px; margin: 0 0 6px; font-weight: 650; }
-  .intro p { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
-  .starters { display: flex; flex-direction: column; gap: 8px; }
+  /* intro dossier */
+  .intro { margin-top: 6vh; }
+  .intro .tile { width: 44px; height: 44px; font-size: 15px; margin-bottom: 14px; }
+  .intro h3 { font-size: 24px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .intro .ep { font-style: italic; color: var(--ink-3); font-size: 15px; margin: 2px 0 10px; }
+  .intro p { color: var(--ink-2); font-size: 14px; margin: 0 0 18px; max-width: 52ch; }
+  .starters { display: flex; flex-direction: column; gap: 8px; max-width: 460px; }
   .starters button {
-    border: 1px solid var(--line-strong); background: #fff; padding: 10px 14px;
-    font-size: 14px; text-align: left; color: var(--ink);
+    border: 1px solid var(--rule-2); background: var(--surface); padding: 10px 14px;
+    font-size: 13.5px; text-align: left;
   }
-  .starters button:hover { border-color: var(--blue); color: var(--blue-deep); }
+  .starters button:hover { border-color: var(--accent); color: var(--accent-deep); }
 
+  /* messages — records keep the regime they were sent under */
   .msg-user {
     align-self: flex-end; max-width: 78%;
-    background: var(--blue-wash); border: 1px solid #d3daf3;
-    padding: 9px 14px; border-radius: 12px 12px 3px 12px;
+    padding: 9px 14px; border-radius: 6px; border: 1px solid;
     white-space: pre-wrap; word-break: break-word;
   }
-  .msg-agent { max-width: 72ch; white-space: pre-wrap; word-break: break-word; }
-  .msg-agent.interim { color: var(--muted); }
+  .msg-user.gov { background: var(--gov-wash); border-color: var(--gov-edge); }
+  .msg-user.ungov { background: var(--ungov-wash); border-color: var(--ungov-edge); }
+  .msg-agent { max-width: 68ch; white-space: pre-wrap; word-break: break-word; }
+  .msg-agent.interim { color: var(--ink-2); }
 
+  /* machine tape */
   .activity {
-    border-left: 2px solid var(--line-strong); padding: 2px 0 2px 14px;
-    font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--muted);
+    background: var(--tape); color: var(--tape-text); border-radius: 6px;
+    border-left: 3px solid var(--rule-2);
+    padding: 10px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.65;
     word-break: break-word;
   }
-  .activity .call { color: var(--blue-deep); }
-  .activity .res { padding-left: 14px; }
-  .activity .err { color: var(--red); }
-
-  .incident {
-    border-left: 3px solid var(--red); background: var(--red-wash);
-    padding: 8px 12px; color: var(--red); font-size: 13.5px; font-weight: 550;
+  .activity.gov { border-left-color: var(--gov); }
+  .activity.ungov { border-left-color: var(--ungov); }
+  .activity .call { font-weight: 500; }
+  .activity.gov .call { color: var(--gov-tape); }
+  .activity.ungov .call { color: var(--ungov-tape); }
+  .activity .res { color: var(--tape-dim); padding-left: 16px; }
+  .activity .res.clamp {
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; cursor: pointer;
   }
-  .sysnote { font-size: 12.5px; color: var(--muted); }
+  .activity .res.clamp:hover { color: var(--tape-text); }
+  .activity .err { color: var(--tape-err); }
+
+  /* incidents — alarm red, and only incidents get it */
+  .incident {
+    display: flex; gap: 10px; align-items: baseline;
+    border-left: 3px solid var(--alarm); background: var(--alarm-wash);
+    padding: 9px 13px; border-radius: 0 6px 6px 0;
+    color: var(--alarm); font-size: 13.5px; font-weight: 550;
+  }
+  .incident::before { content: "■"; font-size: 9px; flex: none; }
+  .sysnote { font-size: 12.5px; color: var(--ink-3); max-width: 60ch; }
 
   .thinking { display: inline-flex; gap: 4px; padding: 4px 0; }
-  .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+  .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
   @media (prefers-reduced-motion: no-preference) {
     .thinking i { animation: blink 1.2s infinite; }
     .thinking i:nth-child(2) { animation-delay: 0.2s; }
     .thinking i:nth-child(3) { animation-delay: 0.4s; }
     @keyframes blink { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+    body, .statusbar, .send { transition: background-color 200ms ease, color 200ms ease; }
   }
 
-  /* Composer */
-  .composer { border-top: 1px solid var(--line); padding: 12px 22px 16px; }
+  /* ── Composer ──────────────────────────────────────────────────── */
+  .composer { border-top: 1px solid var(--rule); padding: 14px 24px 14px; background: var(--surface); }
   .composer-inner {
-    max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end;
-    background: #fff; border: 1.5px solid var(--ink); padding: 8px 8px 8px 14px;
+    max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end;
+    background: #fff; border: 1.5px solid var(--ink); border-radius: 8px; padding: 8px 8px 8px 15px;
   }
-  .composer-inner:has(textarea:disabled) { border-color: var(--line-strong); background: var(--pane); }
+  .composer-inner:has(textarea:disabled) { border-color: var(--rule-2); background: var(--surface-2); }
   .composer textarea {
     flex: 1; border: 0; resize: none; background: transparent; font: inherit;
-    font-size: 14.5px; line-height: 1.45; max-height: 120px; padding: 4px 0;
+    font-size: 14.5px; line-height: 1.45; max-height: 130px; padding: 5px 0;
   }
   .composer textarea:focus { outline: none; }
   .send {
-    border: 0; background: var(--blue); color: #fff; font-weight: 600;
-    font-size: 13.5px; padding: 8px 16px;
+    border: 0; border-radius: 5px; background: var(--accent); color: #fff;
+    font-weight: 600; font-size: 13.5px; padding: 9px 18px;
   }
-  .send:disabled { background: var(--line-strong); cursor: not-allowed; }
-  .composer .hint { max-width: 760px; margin: 6px auto 0; font-size: 11.5px; color: var(--muted); }
+  .send:hover:enabled { background: var(--accent-deep); }
+  .send:disabled { background: var(--rule-2); cursor: not-allowed; }
+  .composer .hint {
+    max-width: 720px; margin: 7px auto 0; font-size: 11.5px; color: var(--ink-3);
+  }
+  .composer .hint b { font-weight: 600; color: var(--accent-deep); }
 
-  @media (max-width: 820px) {
+  /* ── Mobile ────────────────────────────────────────────────────── */
+  @media (max-width: 840px) {
+    .topbar { flex-wrap: wrap; gap: 10px 16px; padding: 10px 16px; }
     .body { flex-direction: column; }
     .sidebar {
-      width: 100%; display: flex; gap: 4px; overflow-x: auto; padding: 8px 10px;
-      border-right: 0; border-bottom: 1px solid var(--line-strong);
+      width: 100%; display: flex; gap: 4px; overflow-x: auto;
+      padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--rule-2);
     }
     .sidebar h2 { display: none; }
-    .agent-item { flex: none; border-left: 0; border-bottom: 3px solid transparent; padding: 6px 10px; }
-    .agent-item[aria-current="true"] { border-bottom-color: var(--blue); }
+    .agent-item { flex: none; width: auto; border-left: 0; border-bottom: 3px solid transparent; padding: 6px 10px; }
+    .agent-item[aria-current="true"] { border-bottom-color: var(--ink); }
     .agent-item .ep { display: none; }
-    .chat-head, .thread, .composer { padding-left: 14px; padding-right: 14px; }
-    .msg-user { max-width: 90%; }
+    .chat-head, .thread, .composer { padding-left: 16px; padding-right: 16px; }
+    .chat-head h1 { font-size: 18px; }
+    .msg-user { max-width: 92%; }
+    .intro { margin-top: 3vh; }
   }
 </style>
 </head>
-<body>
+<body data-regime="governed">
 <div class="shell">
   <header class="topbar">
-    <div class="wordmark">Xenovia<small>Runtime governance console · Veldhoff Logistics demonstration</small></div>
+    <div class="wordmark">Xenovia<small>Runtime governance console · Veldhoff Logistics GmbH demonstration</small></div>
     <div class="spacer"></div>
-    <div class="mode" role="group" aria-label="Endpoint mode">
-      <button class="ungoverned" id="mode-ungoverned" aria-pressed="false">Ungoverned</button>
-      <button class="governed" id="mode-governed" aria-pressed="true">Governed by Xenovia</button>
+    <div class="regime" role="group" aria-label="Endpoint regime">
+      <button class="r-ungov" id="mode-ungoverned" aria-pressed="false"><span class="lamp"></span>Ungoverned</button>
+      <button class="r-gov" id="mode-governed" aria-pressed="true"><span class="lamp"></span>Governed by Xenovia</button>
     </div>
-    <div class="statusline" id="statusline"></div>
   </header>
+  <div class="band"></div>
+  <div class="statusbar" id="statusline"></div>
 
   <div id="gate" class="gate" hidden>
     <h2>Access key required</h2>
@@ -217,13 +294,14 @@
           <textarea id="input" rows="1" placeholder="Message the agent…" aria-label="Message the agent"></textarea>
           <button class="send" id="send">Send</button>
         </div>
-        <div class="hint">Enter to send · Shift+Enter for a new line · every reply is a live model call through the selected endpoint</div>
+        <div class="hint" id="hint"></div>
       </div>
     </main>
   </div>
 </div>
 
 <script>
+const CODES = { ap: "AP", helpdesk: "IT", support: "CS", reporting: "DR" };
 const state = { roster: null, mode: "governed", current: null, threads: {} };
 
 function demoKey() { try { return localStorage.getItem("xenovia-demo-key") || ""; } catch { return ""; } }
@@ -245,6 +323,7 @@ function splitTitle(title) {
   const parts = title.split(" — ");
   return { name: parts[0].replace(" agent", ""), episode: parts[1] || "" };
 }
+function regimeClass() { return state.mode === "governed" ? "gov" : "ungov"; }
 
 async function init() {
   const res = await fetch("/api/agents", { headers: headers() });
@@ -274,11 +353,11 @@ function buildSidebar() {
   for (const agent of state.roster.agents) {
     const t = splitTitle(agent.title);
     const item = el("button", "agent-item");
-    const name = el("div", "name", t.name);
-    const badge = el("span", "badge", "0");
+    const meta = el("div", "meta");
+    meta.append(el("div", "name", t.name), el("div", "ep", t.episode));
+    const badge = el("span", "count", "0");
     badge.hidden = true;
-    name.append(badge);
-    item.append(name, el("div", "ep", t.episode));
+    item.append(el("span", "tile", CODES[agent.key] || "··"), meta, badge);
     item.addEventListener("click", () => selectAgent(agent.key));
     bar.append(item);
 
@@ -297,8 +376,11 @@ function buildSidebar() {
 function renderIntro(c) {
   const t = splitTitle(c.agent.title);
   const intro = el("div", "intro");
+  intro.append(el("span", "tile", CODES[c.agent.key] || "··"));
   intro.append(el("h3", "", t.name));
-  intro.append(el("p", "", c.agent.tagline + " The backend is a dummy system seeded with live bait — talk to the agent and see what it does."));
+  if (t.episode) intro.append(el("div", "ep", t.episode));
+  intro.append(el("p", "", c.agent.tagline
+    + " The backend is a dummy system seeded with live bait — talk to the agent and watch what it does."));
   const starters = el("div", "starters");
   for (const s of c.agent.starters) {
     const b = el("button", "", s);
@@ -330,7 +412,7 @@ function renderHead() {
   if (t.episode) h1.append(el("span", "ep", t.episode));
   const reset = el("button", "reset", "Reset conversation");
   reset.addEventListener("click", () => resetThread(c));
-  head.append(h1, reset, el("div", "tag", c.agent.tagline));
+  head.append(h1, reset);
 }
 
 function renderMode() {
@@ -343,16 +425,25 @@ function renderMode() {
   bG.setAttribute("aria-pressed", String(state.mode === "governed"));
   bU.title = m.ungoverned ? "" : "Set UNGOVERNED_BASE_URL to enable the before-run";
   bG.title = m.governed ? "" : "Set XENOVIA_BASE_URL to enable the governed run";
+
+  const configured = m[state.mode];
+  document.body.dataset.regime = configured ? state.mode : "none";
+
   const s = document.getElementById("statusline");
+  const hint = document.getElementById("hint");
   if (state.mode === "governed" && m.governed) {
-    s.className = "statusline gov";
-    s.textContent = "Actions decided by Xenovia — tenant " + host(state.roster.endpoints.governed) + ". Denials and traces appear in the tenant console.";
+    s.className = "statusbar gov";
+    s.textContent = "Actions decided by Xenovia — tenant " + host(state.roster.endpoints.governed)
+      + ". Denials and traces appear in the tenant console.";
+    hint.innerHTML = "Enter to send · Shift+Enter for a new line · every reply is a live model call, <b>governed by Xenovia</b>";
   } else if (state.mode === "ungoverned" && m.ungoverned) {
-    s.className = "statusline warn";
+    s.className = "statusbar warn";
     s.textContent = "No policy layer attached. Every action the model requests will execute.";
+    hint.innerHTML = "Enter to send · Shift+Enter for a new line · every reply is a live model call, <b>ungoverned</b>";
   } else {
-    s.className = "statusline warn";
+    s.className = "statusbar err";
     s.textContent = "No endpoint configured. Set XENOVIA_BASE_URL (and optionally UNGOVERNED_BASE_URL) on the service.";
+    hint.textContent = "Configure an endpoint to start chatting.";
   }
   syncComposer();
 }
@@ -375,10 +466,10 @@ function push(c, node) {
   c.thread.scrollTop = c.thread.scrollHeight;
 }
 
-function activityBlock(c) {
-  const last = c.inner.lastElementChild;
-  if (last && last.classList.contains("activity") && !last.dataset.closed) return last;
-  const block = el("div", "activity");
+function activityBlock(c, regime) {
+  const open = c.inner.querySelector(".activity:not([data-closed])");
+  if (open) return open;
+  const block = el("div", "activity " + regime);
   push(c, block);
   return block;
 }
@@ -392,16 +483,16 @@ function fmtArgs(args) {
 async function send(c, text) {
   c.busy = true;
   syncComposer();
-  push(c, el("div", "msg-user", text));
+  const regime = regimeClass();
+  push(c, el("div", "msg-user " + regime, text));
   const thinking = el("div", "thinking");
   thinking.append(el("i"), el("i"), el("i"));
   push(c, thinking);
-  const mode = state.mode;
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ agent: c.agent.key, session: c.session, message: text, mode }),
+      body: JSON.stringify({ agent: c.agent.key, session: c.session, message: text, mode: state.mode }),
     });
     if (!res.ok) {
       const e = await res.json().catch(() => ({ error: res.statusText }));
@@ -420,7 +511,7 @@ async function send(c, text) {
       while ((idx = buffer.indexOf("\n")) >= 0) {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
-        if (line) handleEvent(c, thinking, JSON.parse(line));
+        if (line) handleEvent(c, thinking, regime, JSON.parse(line));
       }
     }
   } catch (err) {
@@ -434,7 +525,7 @@ async function send(c, text) {
   }
 }
 
-function handleEvent(c, thinking, ev) {
+function handleEvent(c, thinking, regime, ev) {
   switch (ev.type) {
     case "session":
       c.session = ev.id;
@@ -443,15 +534,19 @@ function handleEvent(c, thinking, ev) {
       push(c, el("div", "msg-agent interim", ev.text));
       break;
     case "tool_call": {
-      const block = activityBlock(c);
+      const block = activityBlock(c, regime);
       block.append(el("div", "call", `▸ ${ev.name}(${fmtArgs(ev.args)})`));
-      c.thread.scrollTop = c.thread.scrollHeight;
       break;
     }
     case "tool_result": {
-      const block = activityBlock(c);
-      block.append(el("div", "res", ev.result));
-      c.thread.scrollTop = c.thread.scrollHeight;
+      const block = activityBlock(c, regime);
+      const res = el("div", "res", ev.result);
+      if (ev.result.length > 220) {
+        res.classList.add("clamp");
+        res.title = "Click to expand";
+        res.addEventListener("click", () => { res.classList.toggle("clamp"); });
+      }
+      block.append(res);
       break;
     }
     case "final": {
@@ -462,7 +557,7 @@ function handleEvent(c, thinking, ev) {
     }
     case "error":
     case "turn_limit": {
-      const block = activityBlock(c);
+      const block = activityBlock(c, regime);
       block.append(el("div", "err", ev.message));
       break;
     }
@@ -471,7 +566,7 @@ function handleEvent(c, thinking, ev) {
       c.incidents += ev.items.length;
       c.badge.textContent = String(c.incidents);
       c.badge.hidden = false;
-      push(c, el("div", "sysnote", state.mode === "governed"
+      push(c, el("div", "sysnote", regime === "gov"
         ? "The tenant let these actions through — review this agent's policy pack in the Xenovia console."
         : "These actions executed with no policy layer. Switch to Governed by Xenovia, reset, and try the same conversation."));
       break;
@@ -508,7 +603,7 @@ input.addEventListener("keydown", (e) => {
 });
 input.addEventListener("input", () => {
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  input.style.height = Math.min(input.scrollHeight, 130) + "px";
 });
 
 init();
