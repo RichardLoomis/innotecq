@@ -1,0 +1,12 @@
+{
+  "name": "xenovia-demo-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev tooling for the Xenovia demo console (the app itself is a static HTML page served by FastAPI — see server.py).",
+  "scripts": {
+    "grab": "grab@latest init"
+  },
+  "devDependencies": {
+    "react-grab": "^0.2.0"
+  }
+}

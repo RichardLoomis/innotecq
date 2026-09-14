@@ -22,7 +22,7 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
 from agents import AGENTS
 from harness import continue_events, load_env
@@ -34,7 +34,18 @@ MAX_SESSIONS = 40
 MAX_MESSAGE_CHARS = 2000
 MAX_ITERS_PER_MESSAGE = 10
 
+# React Grab: dev-only element grabber, injected into the page when REACT_GRAB
+# is set. Never enabled on the public demo (leave the env var unset there).
+REACT_GRAB_TAG = (
+    '<script src="//unpkg.com/react-grab@0.2.0/dist/index.global.js" '
+    'crossorigin="anonymous"></script>'
+)
+
 app = FastAPI(title="Xenovia demo console")
+
+
+def _react_grab_enabled() -> bool:
+    return load_env().get("REACT_GRAB", "").strip().lower() in ("1", "true", "yes", "on")
 
 _sessions: dict[str, dict] = {}
 _lock = threading.Lock()
@@ -210,6 +221,12 @@ async def reset(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
-@app.get("/")
-def index() -> FileResponse:
-    return FileResponse(ROOT / "static" / "index.html")
+@app.get("/", response_model=None)
+def index() -> FileResponse | HTMLResponse:
+    path = ROOT / "static" / "index.html"
+    if not _react_grab_enabled():
+        return FileResponse(path)
+    html = path.read_text()
+    if REACT_GRAB_TAG not in html:
+        html = html.replace("</head>", REACT_GRAB_TAG + "\n</head>", 1)
+    return HTMLResponse(html)

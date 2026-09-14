@@ -46,6 +46,29 @@ Environment:
 - `DEMO_PASSWORD` — optional access key. **Set it on any public deployment**:
   without it, anyone with the URL can start runs against your API keys.
 
+## Grab UI elements while iterating (dev only)
+
+[React Grab](https://github.com/aidenybai/react-grab) is wired in as a
+devDependency so you can point the agent at exact elements: hover any part of
+the console, grab it, and the coding agent reads your selection instead of you
+describing it.
+
+It only loads when `REACT_GRAB` is set, so the public demo never ships it:
+
+```bash
+REACT_GRAB=1 XENOVIA_BASE_URL=... uvicorn server:app --port 8000
+```
+
+The server then injects the React Grab script (from unpkg — no `npm install`
+needed) into the page. Hover an element, use React Grab's grab shortcut
+(⌘C / Ctrl+C) or its send-to-agent box, and the agent picks up the selection
+through the React Grab MCP server.
+
+Note: the console is a static HTML page, not a React app, so a grab carries the
+DOM element's context (selector, classes, text, position) rather than a React
+component + source mapping. That's still enough to locate and edit the exact
+markup in `static/index.html`.
+
 ## Deploy on Railway
 
 The repo is deploy-ready: `railway.json` sets the start command and
