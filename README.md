@@ -20,8 +20,8 @@ cp .env.example .env   # then set XENOVIA_BASE_URL / XENOVIA_API_KEY / XENOVIA_M
 
 ## Web console (chat)
 
-`server.py` + `static/index.html` are a ChatGPT-style console: pick an agent in
-the sidebar and **talk to it**. Each agent holds its own conversation over its
+The console is a ChatGPT-style app (React UI in `web/`, FastAPI in `server.py`):
+pick an agent in the sidebar and **talk to it**. Each agent holds its own conversation over its
 own dummy backend (ERP, directory, CRM, tables — seeded with the bait), and
 every reply is a live model call through the selected endpoint. Tool calls and
 their results render inline in the thread; when the agent does something a
@@ -34,45 +34,51 @@ lives in the data (invoice `INV-2204`, ticket `T-102`, ticket `T-502`, request
 `DR-2288`). Ask the agent to work its queue, or hand it the poisoned item by
 name, and watch what it does.
 
+The UI is a **React app** (`web/`, Vite) styled to match app.xenovia.io. The
+FastAPI backend (`server.py`) holds the sessions, dummy backends, and the live
+Xenovia proxy; it also serves the built React app in production.
+
+### Run it locally
+
+Two processes in dev — the backend, and the Vite dev server that proxies `/api`
+to it:
+
 ```bash
-uvicorn server:app --port 8000
+# terminal 1 — backend
+XENOVIA_BASE_URL=... uvicorn server:app --port 8000
+
+# terminal 2 — UI with hot reload + React Grab
+cd web && npm install && npm run dev      # http://localhost:5173
 ```
 
-Environment:
+To run the production path (what Railway serves) from one process:
+
+```bash
+npm --prefix web install && npm --prefix web run build
+uvicorn server:app --port 8000            # serves web/dist at /
+```
+
+Environment (backend):
 
 - `XENOVIA_BASE_URL` / `XENOVIA_API_KEY` / `XENOVIA_MODEL` — the governed tenant.
 - `UNGOVERNED_BASE_URL` / `UNGOVERNED_API_KEY` / `UNGOVERNED_MODEL` — optional
   raw endpoint for the "before" run; the toggle is disabled without it.
 - `DEMO_PASSWORD` — optional access key. **Set it on any public deployment**:
-  without it, anyone with the URL can start runs against your API keys.
+  without it, anyone with the URL can start conversations against your API keys.
 
-## Grab UI elements while iterating (dev only)
+## Grab UI elements while iterating
 
-[React Grab](https://github.com/aidenybai/react-grab) is wired in as a
-devDependency so you can point the agent at exact elements: hover any part of
-the console, grab it, and the coding agent reads your selection instead of you
-describing it.
-
-It only loads when `REACT_GRAB` is set, so the public demo never ships it:
-
-```bash
-REACT_GRAB=1 XENOVIA_BASE_URL=... uvicorn server:app --port 8000
-```
-
-The server then injects the React Grab script (from unpkg — no `npm install`
-needed) into the page. Hover an element, use React Grab's grab shortcut
-(⌘C / Ctrl+C) or its send-to-agent box, and the agent picks up the selection
-through the React Grab MCP server.
-
-Note: the console is a static HTML page, not a React app, so a grab carries the
-DOM element's context (selector, classes, text, position) rather than a React
-component + source mapping. That's still enough to locate and edit the exact
-markup in `static/index.html`.
+[React Grab](https://github.com/aidenybai/react-grab) is a devDependency
+(`web/`) loaded only in Vite dev (`import.meta.env.DEV`), so it never ships in
+the production build. In `npm run dev`, hover any part of the console, grab it
+(⌘C / Ctrl+C or the send-to-agent box), and the agent gets your selection
+mapped to the actual **component and source line** (e.g.
+`web/src/components/Topbar.jsx:26`) — click a component, don't describe it.
 
 ## Deploy on Railway
 
-The repo is deploy-ready: `railway.json` sets the start command and
-`/health` healthcheck; `.python-version` pins Python 3.12.
+The build is a two-stage `Dockerfile` (Node builds `web/`, Python serves the API
++ built UI); `railway.json` points Railway at it with a `/health` healthcheck.
 
 ```bash
 railway init
@@ -151,12 +157,15 @@ pack prevents.
 ## Layout
 
 ```
-server.py          FastAPI chat console: live streaming, sessions, mode toggle, gate
-static/index.html  the chat UI
+server.py          FastAPI: /api chat streaming, sessions, gate; serves web/dist
 harness.py         shared tool-calling loop and event stream (continue_events)
 agents/            one file per agent: prompt, dummy backend, starters, selftests
+web/               React UI (Vite) — components in web/src/components/
+  src/App.jsx      state, streaming reducer, agent switching
+  src/components/  Sidebar, ChatPane, Topbar, RegimeToggle, Hero, Thread, …
 run_demo.py        CLI: list, selftest, or run an agent scenario headless
-railway.json       Railway start command + healthcheck
+Dockerfile         two-stage build (Node builds web/, Python serves) for Railway
+railway.json       points Railway at the Dockerfile + /health healthcheck
 USE-CASES.md       the strategy doc: narrative, personas, why these four
 ```
 

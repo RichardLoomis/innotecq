@@ -5,3 +5,4 @@ __pycache__/
 .claude/
 out/
 node_modules/
+web/dist/

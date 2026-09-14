@@ -49,7 +49,7 @@ def load_env() -> dict[str, str]:
             key, value = line.split("=", 1)
             env[key.strip()] = value.strip()
     for key, value in os.environ.items():
-        if key.startswith(("XENOVIA_", "UNGOVERNED_", "DEMO_", "REACT_")) and value:
+        if key.startswith(("XENOVIA_", "UNGOVERNED_", "DEMO_")) and value:
             env[key] = value
     return env
 

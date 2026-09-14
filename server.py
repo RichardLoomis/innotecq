@@ -22,30 +22,21 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from agents import AGENTS
 from harness import continue_events, load_env
 
 ROOT = pathlib.Path(__file__).resolve().parent
+WEB_DIST = ROOT / "web" / "dist"
 DEFAULT_MODEL = "claude-sonnet-5"
 MAX_CONCURRENT_CHATS = 8
 MAX_SESSIONS = 40
 MAX_MESSAGE_CHARS = 2000
 MAX_ITERS_PER_MESSAGE = 10
 
-# React Grab: dev-only element grabber, injected into the page when REACT_GRAB
-# is set. Never enabled on the public demo (leave the env var unset there).
-REACT_GRAB_TAG = (
-    '<script src="//unpkg.com/react-grab@0.2.0/dist/index.global.js" '
-    'crossorigin="anonymous"></script>'
-)
-
 app = FastAPI(title="Xenovia demo console")
-
-
-def _react_grab_enabled() -> bool:
-    return load_env().get("REACT_GRAB", "").strip().lower() in ("1", "true", "yes", "on")
 
 _sessions: dict[str, dict] = {}
 _lock = threading.Lock()
@@ -221,12 +212,18 @@ async def reset(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
-@app.get("/", response_model=None)
-def index() -> FileResponse | HTMLResponse:
-    path = ROOT / "static" / "index.html"
-    if not _react_grab_enabled():
-        return FileResponse(path)
-    html = path.read_text()
-    if REACT_GRAB_TAG not in html:
-        html = html.replace("</head>", REACT_GRAB_TAG + "\n</head>", 1)
-    return HTMLResponse(html)
+# Serve the built React app (see web/). In production the Docker build runs
+# `vite build` first, so web/dist exists and is mounted at "/". API routes are
+# declared above, so they take precedence over this catch-all mount. In local
+# dev without a build, run the Vite dev server (web/: npm run dev), which
+# proxies /api and /health here.
+if WEB_DIST.exists():
+    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+else:
+    @app.get("/")
+    def index() -> JSONResponse:
+        return JSONResponse({
+            "error": "web/dist not built",
+            "hint": "Run the Vite dev server (cd web && npm run dev) for local dev, "
+                    "or `npm --prefix web run build` to serve the built UI from here.",
+        }, status_code=503)
