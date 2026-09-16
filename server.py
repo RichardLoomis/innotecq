@@ -19,6 +19,7 @@ import hmac
 import json
 import os
 import pathlib
+import re
 import threading
 import time
 import uuid
@@ -59,6 +60,17 @@ LOGIN_WINDOW = 60.0          # seconds
 LOGIN_MAX_ATTEMPTS = 10      # per IP per window, to slow brute force
 
 app = FastAPI(title="Xenovia demo console")
+
+
+@app.middleware("http")
+async def _no_cache_html(request: Request, call_next):
+    """Never cache index.html so a redeploy always serves the latest bundle;
+    the hashed JS/CSS assets stay cacheable."""
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["cache-control"] = "no-cache"
+    return response
+
 
 _sessions: dict[str, dict] = {}
 _login_hits: dict[str, list[float]] = {}
@@ -199,6 +211,30 @@ def roster(request: Request) -> dict:
     }
 
 
+def _deny_reason(exc: Exception) -> str:
+    """Pull a clean human message out of a gateway deny (e.g. Xenovia's 403)."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        if isinstance(err, str) and err:
+            return err
+        if body.get("message"):
+            return str(body["message"])
+    match = re.search(r"['\"]message['\"]\s*:\s*['\"]([^'\"]+)['\"]", str(exc))
+    return match.group(1) if match else "blocked by policy"
+
+
+def _error_event(exc: Exception) -> dict:
+    """A 403 is a policy block (the demo payoff), not a crash — surface it as
+    a clean 'blocked' event; anything else is a terse error, never a raw dump."""
+    status = getattr(exc, "status_code", None)
+    if status == 403 or "Error code: 403" in str(exc):
+        return {"type": "blocked", "reason": _deny_reason(exc)}
+    return {"type": "error", "message": "the model call failed — check the gateway and try again"}
+
+
 def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
     global _active_chats
     state = session["state"]
@@ -221,7 +257,7 @@ def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
             yield json.dumps({"type": "incidents", "items": new_incidents}) + "\n"
         yield json.dumps({"type": "done"}) + "\n"
     except Exception as exc:  # keep the console alive whatever a turn does
-        yield json.dumps({"type": "error", "message": str(exc)}) + "\n"
+        yield json.dumps(_error_event(exc)) + "\n"
         yield json.dumps({"type": "done"}) + "\n"
     finally:
         session["busy"] = False

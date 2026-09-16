@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import Message from "./Message.jsx";
 import ToolActivity from "./ToolActivity.jsx";
 import IncidentCard from "./IncidentCard.jsx";
+import BlockedCard from "./BlockedCard.jsx";
 
 function Thinking() {
   return <div className="thinking"><i /><i /><i /></div>;
@@ -22,6 +23,7 @@ export default function Thread({ items, busy }) {
               case "final": return <Message key={it.id} role="agent" text={it.text} />;
               case "activity": return <ToolActivity key={it.id} regime={it.regime} lines={it.lines} />;
               case "incident": return <IncidentCard key={it.id} text={it.text} />;
+              case "blocked": return <BlockedCard key={it.id} regime={it.regime} reason={it.reason} />;
               case "sysnote": return <div className="sysnote" key={it.id}>{it.text}</div>;
               default: return null;
             }

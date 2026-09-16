@@ -163,20 +163,19 @@ class APAgent:
         llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key or "xenovia-demo")
         agent = create_agent(llm, _tools(state), system_prompt=SYSTEM_PROMPT)
 
-        try:
-            for chunk in agent.stream({"messages": list(messages)},
-                                      {"recursion_limit": max_iters * 2},
-                                      stream_mode="updates"):
-                for update in chunk.values():
-                    for msg in update.get("messages", []) if isinstance(update, dict) else []:
-                        messages.append(msg)
-                        if isinstance(msg, AIMessage):
-                            for call in msg.tool_calls or []:
-                                yield {"type": "tool_call", "name": call["name"], "args": call.get("args") or {}}
-                            if not msg.tool_calls:
-                                text = msg.content if isinstance(msg.content, str) else str(msg.content or "")
-                                yield {"type": "final", "text": text or "(no reply)"}
-                        elif isinstance(msg, ToolMessage):
-                            yield {"type": "tool_result", "name": msg.name, "result": _short(msg.content)}
-        except Exception as exc:
-            yield {"type": "error", "message": f"model call failed: {exc}"}
+        # Stream the agent; any model/gateway error (e.g. a 403 policy block)
+        # bubbles to the server, which formats it as a clean event.
+        for chunk in agent.stream({"messages": list(messages)},
+                                  {"recursion_limit": max_iters * 2},
+                                  stream_mode="updates"):
+            for update in chunk.values():
+                for msg in update.get("messages", []) if isinstance(update, dict) else []:
+                    messages.append(msg)
+                    if isinstance(msg, AIMessage):
+                        for call in msg.tool_calls or []:
+                            yield {"type": "tool_call", "name": call["name"], "args": call.get("args") or {}}
+                        if not msg.tool_calls:
+                            text = msg.content if isinstance(msg.content, str) else str(msg.content or "")
+                            yield {"type": "final", "text": text or "(no reply)"}
+                    elif isinstance(msg, ToolMessage):
+                        yield {"type": "tool_result", "name": msg.name, "result": _short(msg.content)}

@@ -100,6 +100,7 @@ export default function App() {
           case "tool_call": dispatch({ type: "activity", key, regime, line: { type: "call", name: ev.name, args: ev.args } }); break;
           case "tool_result": dispatch({ type: "activity", key, regime, line: { type: "result", text: ev.result } }); break;
           case "final": dispatch({ type: "closeActivity", key }); dispatch({ type: "append", key, item: { id: uid(), kind: "final", text: ev.text } }); break;
+          case "blocked": dispatch({ type: "closeActivity", key }); dispatch({ type: "append", key, item: { id: uid(), kind: "blocked", regime, reason: ev.reason } }); break;
           case "error":
           case "turn_limit": dispatch({ type: "activity", key, regime, line: { type: "err", text: ev.message } }); break;
           case "incidents": dispatch({ type: "incidents", key, regime, items: ev.items }); break;
