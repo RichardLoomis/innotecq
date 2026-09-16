@@ -153,12 +153,13 @@ class SupportAgent:
     def new_state(self) -> SupportState:
         return SupportState()
 
-    def stream(self, state, messages, *, base_url, api_key, model, max_iters=10):
+    def stream(self, state, messages, *, base_url, api_key, model, max_iters=10, extra_body=None):
         from langchain.agents import create_agent
         from langchain_core.messages import AIMessage, ToolMessage
         from langchain_openai import ChatOpenAI
 
-        llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key or "xenovia-demo")
+        llm = ChatOpenAI(model=model, base_url=base_url, api_key=api_key or "xenovia-demo",
+                         extra_body=extra_body)
         agent = create_agent(llm, _tools(state), system_prompt=SYSTEM_PROMPT)
         # Stream the agent; any model/gateway error (e.g. a 403 policy block)
         # bubbles to the server, which formats it as a clean event.

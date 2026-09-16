@@ -101,11 +101,17 @@ def _endpoint(mode: str, agent_key: str) -> dict | None:
     base_url = get("BASE_URL")
     if not base_url:
         return None
-    return {
+    result = {
         "base_url": base_url,
         "api_key": get("API_KEY"),
         "model": get("MODEL") or DEFAULT_MODEL,
     }
+    # Direct mode via OpenRouter can pin an upstream provider (e.g. DeepInfra):
+    #   DIRECT_PROVIDER=deepinfra  (or per-agent DIRECT_<AGENT>_PROVIDER)
+    provider = get("PROVIDER") if mode == "direct" else ""
+    if provider:
+        result["extra_body"] = {"provider": {"only": [provider], "allow_fallbacks": False}}
+    return result
 
 
 def _demo_password() -> str:
@@ -250,6 +256,7 @@ def _chat_stream(session_id: str, session: dict, text: str, endpoint: dict):
             api_key=endpoint["api_key"],
             model=endpoint["model"],
             max_iters=MAX_ITERS_PER_MESSAGE,
+            extra_body=endpoint.get("extra_body"),
         ):
             yield json.dumps(event) + "\n"
         new_incidents = state.incidents[seen:]
